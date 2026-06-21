@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ChainService } from "../chain/chain.service";
+import { SettlementService } from "../settlement/settlement.service";
 import { CallClaim, CallResolution, Round, RoundOutcome } from "./round";
 import { Hanchan, HanchanLength } from "./hanchan";
 
@@ -32,7 +33,10 @@ export class GameService {
   private readonly logger = new Logger(GameService.name);
   private readonly rooms = new Map<string, Room>();
 
-  constructor(private readonly chain: ChainService) {}
+  constructor(
+    private readonly chain: ChainService,
+    private readonly settlement: SettlementService,
+  ) {}
 
   /**
    * Mulai ronde untuk sebuah game. Seed diambil dari on-chain bila tersedia,
@@ -72,13 +76,17 @@ export class GameService {
     return this.room(chainGameId).hanchan.round;
   }
 
-  /** Catat hasil 1 ronde ke hanchan; bila game selesai, hitung & tandatangani ranking final. */
+  /** Catat hasil 1 ronde ke hanchan; bila game selesai, buka sesi settle + tanda tangan server. */
   async recordOutcome(chainGameId: string, outcome: RoundOutcome): Promise<RoundEnd> {
     const room = this.room(chainGameId);
     room.hanchan.recordOutcome(outcome);
     const finished = room.hanchan.finished;
     const end: RoundEnd = { outcome, finished, hanchan: room.hanchan.state() };
-    if (finished) end.settle = await this.finalizeAndSign(chainGameId);
+    if (finished) {
+      end.settle = await this.finalizeAndSign(chainGameId);
+      // buka sesi settle: pemain dapat submit tanda tangan untuk `settle` kooperatif
+      this.settlement.open(chainGameId, room.players, end.settle.ranking);
+    }
     return end;
   }
 
