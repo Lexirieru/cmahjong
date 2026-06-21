@@ -10,7 +10,7 @@
  * sehingga seluruh game tetap provably fair dari satu seed publik.
  */
 import { solidityPackedKeccak256 } from "ethers";
-import { Round, RoundOutcome, SEATS, START_POINTS } from "./round";
+import { Round, RoundOutcome, RoundSnapshot, SEATS, START_POINTS } from "./round";
 
 const EAST = 27;
 const SOUTH = 28;
@@ -39,8 +39,8 @@ export class Hanchan {
   private handIndex = 0;
 
   constructor(
-    private readonly baseSeed: string,
-    private readonly length: HanchanLength = "hanchan",
+    private baseSeed: string,
+    private length: HanchanLength = "hanchan",
   ) {
     this.startRound();
   }
@@ -135,4 +135,52 @@ export class Hanchan {
     seats.sort((a, b) => (this.points[b] !== this.points[a] ? this.points[b] - this.points[a] : a - b));
     return seats;
   }
+
+  /** Serialisasi seluruh state game (meta + ronde live) untuk disimpan ke DB. */
+  snapshot(): HanchanSnapshot {
+    return {
+      points: this.points,
+      dealer: this.dealer,
+      roundWind: this.roundWind,
+      kyokuNum: this.kyokuNum,
+      honba: this.honba,
+      riichiSticks: this.riichiSticks,
+      finished: this.finished,
+      handIndex: this.handIndex,
+      baseSeed: this.baseSeed,
+      length: this.length,
+      round: this.round.snapshot(),
+    };
+  }
+
+  /** Rekonstruksi Hanchan dari snapshot (tanpa memanggil constructor). */
+  static restore(s: HanchanSnapshot): Hanchan {
+    const h = Object.create(Hanchan.prototype) as Hanchan;
+    h.points = s.points;
+    h.dealer = s.dealer;
+    h.roundWind = s.roundWind;
+    h.kyokuNum = s.kyokuNum;
+    h.honba = s.honba;
+    h.riichiSticks = s.riichiSticks;
+    h.finished = s.finished;
+    h.handIndex = s.handIndex;
+    h.baseSeed = s.baseSeed;
+    h.length = s.length;
+    h.round = Round.restore(s.round);
+    return h;
+  }
+}
+
+export interface HanchanSnapshot {
+  points: number[];
+  dealer: number;
+  roundWind: number;
+  kyokuNum: number;
+  honba: number;
+  riichiSticks: number;
+  finished: boolean;
+  handIndex: number;
+  baseSeed: string;
+  length: HanchanLength;
+  round: RoundSnapshot;
 }

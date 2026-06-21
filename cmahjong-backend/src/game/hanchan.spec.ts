@@ -77,6 +77,25 @@ describe("Hanchan - rotasi dealer & wind", () => {
   });
 });
 
+describe("Hanchan - snapshot/restore (resume)", () => {
+  it("round-trip lewat JSON mempertahankan meta + ronde live", () => {
+    const h = new Hanchan(SEED, "east");
+    h.honba = 1;
+    h.riichiSticks = 2;
+    const snap = JSON.parse(JSON.stringify(h.snapshot()));
+    const h2 = Hanchan.restore(snap);
+
+    expect(h2.state()).toEqual(h.state());
+    expect(h2.round.publicState()).toEqual(h.round.publicState());
+
+    // advance identik pada keduanya -> meta tetap sinkron
+    const out = draw([25000, 25000, 25000, 25000], [true, true, true, true]);
+    h.advance(out, 0);
+    h2.advance(out, 0);
+    expect(h2.state()).toEqual(h.state());
+  });
+});
+
 describe("Hanchan - honba & riichi sticks", () => {
   it("ron: honba menambah 300/honba ke pemenang dari pembuang", () => {
     const h = new Hanchan(SEED);

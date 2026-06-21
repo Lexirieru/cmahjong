@@ -27,6 +27,7 @@ model GameTable {
   server        String // alamat server/operator
   status        TableStatus @default(OPEN)
   seed          String? // seed kolektif setelah reveal lengkap
+  liveState     Json? // snapshot Hanchan/Round live (untuk resume setelah restart)
   finalRanking  String[] // alamat juara 1..4 saat settle
   serverSig     String? // tanda tangan server (settleByServer)
   createdAt     DateTime    @default(now())

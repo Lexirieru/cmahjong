@@ -181,6 +181,44 @@ describe("Round - kan", () => {
   });
 });
 
+describe("Round - snapshot/restore (resume)", () => {
+  it("round-trip lewat JSON mempertahankan state & bisa dilanjut", () => {
+    const r = new Round(SEED, 0);
+    const before = r.publicState();
+    const handsBefore = [0, 1, 2, 3].map((s) => r.handOf(s));
+
+    // simulasi simpan->muat dari DB (JSON)
+    const snap = JSON.parse(JSON.stringify(r.snapshot()));
+    const r2 = Round.restore(snap);
+
+    expect(r2.publicState()).toEqual(before);
+    [0, 1, 2, 3].forEach((s) => expect(r2.handOf(s)).toEqual(handsBefore[s]));
+
+    // lanjut bermain pada instance yang dipulihkan
+    const drawn = r2.handOf(0)[r2.handOf(0).length - 1].id;
+    expect(() => r2.discard(0, drawn)).not.toThrow();
+  });
+
+  it("mempertahankan state di tengah ronde (setelah beberapa aksi)", () => {
+    const r = injected({
+      hands: [
+        [27, 27, 27, 28, 28, 28, 29, 29, 29, 30, 30, 33, 33, 13],
+        HONORS,
+        [13, 13, 1, 2, 4, 5, 7, 8, 19, 20, 22, 23, 25],
+        HONORS,
+      ],
+    });
+    r.discard(0, -1); // masuk fase call (seat2 bisa pon 5p)
+    const snap = JSON.parse(JSON.stringify(r.snapshot()));
+    const r2 = Round.restore(snap);
+    expect(r2.publicState()).toEqual(r.publicState());
+    // pon masih bisa dieksekusi pada instance pulihan
+    const res = r2.respond(2, { type: "pon" });
+    expect(res.resolved).toBe(true);
+    expect(r2.turn).toBe(2);
+  });
+});
+
 describe("Round - riichi", () => {
   it("menolak riichi bila tidak tenpai", () => {
     const r = injected({

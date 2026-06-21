@@ -681,4 +681,98 @@ export class Round {
   private ensure(phase: Phase) {
     if (this.phase !== phase) throw new Error(`aksi tak valid pada fase ${this.phase}`);
   }
+
+  // ---------------------------------------------------------------- persist
+  /** Serialisasi seluruh state ronde (JSON-safe) untuk disimpan ke DB. */
+  snapshot(): RoundSnapshot {
+    return {
+      dealer: this.dealer,
+      roundWind: this.roundWind,
+      phase: this.phase,
+      hands: this.hands,
+      liveWall: this.liveWall,
+      deadWall: this.deadWall,
+      kansDone: this.kansDone,
+      melds: this.melds,
+      discards: this.discards,
+      doraIndicators: this.doraIndicators,
+      uraIndicators: this.uraIndicators,
+      chankan: this.chankan,
+      riichi: this.riichi,
+      riichiDouble: this.riichiDouble,
+      ippatsu: this.ippatsu,
+      furitenPerm: this.furitenPerm,
+      furitenTemp: this.furitenTemp,
+      anyCall: this.anyCall,
+      points: this.points,
+      turn: this.turn,
+      lastDiscard: this.lastDiscard,
+      awaitingDiscard: this.awaitingDiscard,
+      drewFromWall: this.drewFromWall,
+      rinshanPending: this.rinshanPending,
+      pendingCalls: this.pendingCalls,
+      responses: [...this.responses.entries()],
+    };
+  }
+
+  /** Rekonstruksi Round dari snapshot. */
+  static restore(s: RoundSnapshot): Round {
+    const r = new Round("0x" + "00".repeat(32), s.dealer, s.roundWind, s.points.slice(), {
+      hands: s.hands,
+      liveWall: s.liveWall,
+      deadWall: s.deadWall,
+      turn: s.turn,
+      skipInitialDraw: true,
+    });
+    r.phase = s.phase;
+    r.kansDone = s.kansDone;
+    r.melds = s.melds;
+    r.discards = s.discards;
+    r.doraIndicators = s.doraIndicators;
+    r.uraIndicators = s.uraIndicators;
+    r.chankan = s.chankan;
+    r.riichi = s.riichi;
+    r.riichiDouble = s.riichiDouble;
+    r.ippatsu = s.ippatsu;
+    r.furitenPerm = s.furitenPerm;
+    r.furitenTemp = s.furitenTemp;
+    r.anyCall = s.anyCall;
+    r.points = s.points;
+    r.lastDiscard = s.lastDiscard;
+    r.awaitingDiscard = s.awaitingDiscard;
+    r.drewFromWall = s.drewFromWall;
+    r.rinshanPending = s.rinshanPending;
+    r.pendingCalls = s.pendingCalls;
+    r.responses = new Map(s.responses);
+    return r;
+  }
+}
+
+export interface RoundSnapshot {
+  dealer: number;
+  roundWind: number;
+  phase: Phase;
+  hands: Tile[][];
+  liveWall: Tile[];
+  deadWall: Tile[];
+  kansDone: number;
+  melds: Meld[][];
+  discards: number[][];
+  doraIndicators: number[];
+  uraIndicators: number[];
+  chankan: { seat: number; kind: number } | null;
+  riichi: boolean[];
+  riichiDouble: boolean[];
+  ippatsu: boolean[];
+  furitenPerm: boolean[];
+  furitenTemp: boolean[];
+  anyCall: boolean;
+  points: number[];
+  turn: number;
+  lastDiscard: { seat: number; kind: number } | null;
+  awaitingDiscard: boolean;
+  drewFromWall: boolean;
+  rinshanPending: boolean;
+  pendingCalls: Call[];
+  responses: [number, CallClaim][];
 }

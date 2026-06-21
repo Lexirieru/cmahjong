@@ -1,9 +1,9 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { ChainService } from "../chain/chain.service";
 import { SettlementService } from "../settlement/settlement.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CallClaim, CallResolution, Round, RoundOutcome } from "./round";
-import { Hanchan, HanchanLength } from "./hanchan";
+import { Hanchan, HanchanLength, HanchanSnapshot } from "./hanchan";
 
 interface Room {
   chainGameId: string;
@@ -30,15 +30,62 @@ export interface RoundEnd {
  * Metadata bisa di-mirror ke Postgres (TODO: persist penuh).
  */
 @Injectable()
-export class GameService {
+export class GameService implements OnModuleInit {
   private readonly logger = new Logger(GameService.name);
   private readonly rooms = new Map<string, Room>();
+  private readonly snapTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly chain: ChainService,
     private readonly settlement: SettlementService,
     private readonly prisma: PrismaService,
   ) {}
+
+  /** Saat boot: pulihkan game yang masih PLAYING dari DB agar bisa di-resume. */
+  async onModuleInit(): Promise<void> {
+    try {
+      const rows = await this.prisma.gameTable.findMany({
+        where: { status: "PLAYING" },
+        include: { seats: true },
+      });
+      for (const r of rows) {
+        if (!r.liveState) continue;
+        const hanchan = Hanchan.restore(r.liveState as unknown as HanchanSnapshot);
+        const players = [...r.seats]
+          .sort((a, b) => a.seatIndex - b.seatIndex)
+          .map((s) => s.address);
+        this.rooms.set(r.chainGameId, { chainGameId: r.chainGameId, players, seed: r.seed ?? "", hanchan });
+        this.logger.log(`Game ${r.chainGameId} dipulihkan dari DB (resume)`);
+      }
+    } catch (e) {
+      this.logger.warn(`Gagal memuat game aktif dari DB: ${(e as Error).message}`);
+    }
+  }
+
+  /** Jadwalkan simpan snapshot (coalesced: maks 1 tulis / 400ms per game). */
+  private queueSnapshot(chainGameId: string): void {
+    if (this.snapTimers.has(chainGameId)) return;
+    const t = setTimeout(() => {
+      this.snapTimers.delete(chainGameId);
+      void this.saveSnapshot(chainGameId);
+    }, 400);
+    if (typeof t.unref === "function") t.unref();
+    this.snapTimers.set(chainGameId, t);
+  }
+
+  private async saveSnapshot(chainGameId: string): Promise<void> {
+    const room = this.rooms.get(chainGameId);
+    if (!room || room.hanchan.finished) return;
+    try {
+      await this.prisma.gameTable.update({
+        where: { chainGameId },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: { liveState: room.hanchan.snapshot() as any },
+      });
+    } catch (e) {
+      this.logger.warn(`saveSnapshot gagal: ${(e as Error).message}`);
+    }
+  }
 
   /** Mirror lifecycle game ke Postgres (best-effort; DB mati tak mengganggu gameplay). */
   private async persistStart(room: Room) {
@@ -149,6 +196,8 @@ export class GameService {
       // buka sesi settle: pemain dapat submit tanda tangan untuk `settle` kooperatif
       this.settlement.open(chainGameId, room.players, end.settle.ranking);
       void this.persistSettled(chainGameId, end.settle.ranking, room.hanchan.points);
+    } else {
+      this.queueSnapshot(chainGameId); // ronde baru — simpan agar resume akurat
     }
     return end;
   }
@@ -176,11 +225,14 @@ export class GameService {
   }
 
   discard(chainGameId: string, seat: number, tileId: number): RoundOutcome | null {
-    return this.round(chainGameId).discard(seat, tileId);
+    const out = this.round(chainGameId).discard(seat, tileId);
+    this.queueSnapshot(chainGameId);
+    return out;
   }
 
   riichi(chainGameId: string, seat: number, tileId: number): void {
     this.round(chainGameId).declareRiichi(seat, tileId);
+    this.queueSnapshot(chainGameId);
   }
 
   tsumo(chainGameId: string, seat: number): RoundOutcome {
@@ -195,16 +247,22 @@ export class GameService {
 
   /** Respons call seorang pemain (pon/chi/kan/ron/pass); resolusi prioritas otomatis. */
   respond(chainGameId: string, seat: number, claim: CallClaim): CallResolution {
-    return this.round(chainGameId).respond(seat, claim);
+    const res = this.round(chainGameId).respond(seat, claim);
+    this.queueSnapshot(chainGameId);
+    return res;
   }
 
   ankan(chainGameId: string, seat: number, kind: number): RoundOutcome | null {
-    return this.round(chainGameId).ankan(seat, kind);
+    const out = this.round(chainGameId).ankan(seat, kind);
+    this.queueSnapshot(chainGameId);
+    return out;
   }
 
   /** Shouminkan (tambah pon -> kan); bisa memicu fase chankan. */
   addedKan(chainGameId: string, seat: number, kind: number): RoundOutcome | null {
-    return this.round(chainGameId).addedKan(seat, kind);
+    const out = this.round(chainGameId).addedKan(seat, kind);
+    this.queueSnapshot(chainGameId);
+    return out;
   }
 
   /**
