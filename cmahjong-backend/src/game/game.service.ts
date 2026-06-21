@@ -36,6 +36,8 @@ export class GameService implements OnModuleInit {
   private readonly logger = new Logger(GameService.name);
   private readonly rooms = new Map<string, Room>();
   private readonly snapTimers = new Map<string, NodeJS.Timeout>();
+  private readonly moveBuffers = new Map<string, { seq: number; seatIndex: number; kind: string; payload: object }[]>();
+  private readonly moveFlushTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly chain: ChainService,
@@ -94,6 +96,54 @@ export class GameService implements OnModuleInit {
       });
     } catch (e) {
       this.logger.warn(`saveSnapshot gagal: ${(e as Error).message}`);
+    }
+  }
+
+  /** Catat satu aksi ke buffer untuk replay (di-flush ter-batch). */
+  private logMove(chainGameId: string, kind: string, seatIndex: number, payload: object = {}) {
+    const room = this.rooms.get(chainGameId);
+    if (!room) return;
+    const seq = room.moveSeq++;
+    let buf = this.moveBuffers.get(chainGameId);
+    if (!buf) {
+      buf = [];
+      this.moveBuffers.set(chainGameId, buf);
+    }
+    buf.push({ seq, seatIndex, kind, payload });
+    this.scheduleMoveFlush(chainGameId);
+  }
+
+  private scheduleMoveFlush(chainGameId: string) {
+    if (this.moveFlushTimers.has(chainGameId)) return;
+    const t = setTimeout(() => {
+      this.moveFlushTimers.delete(chainGameId);
+      void this.flushMoves(chainGameId);
+    }, 800);
+    if (typeof t.unref === "function") t.unref();
+    this.moveFlushTimers.set(chainGameId, t);
+  }
+
+  /** Tulis buffer aksi ke DB sebagai batch (createMany). */
+  async flushMoves(chainGameId: string): Promise<void> {
+    const room = this.rooms.get(chainGameId);
+    const buf = this.moveBuffers.get(chainGameId);
+    if (!buf || buf.length === 0) return;
+    if (!room?.dbId) {
+      this.scheduleMoveFlush(chainGameId); // row DB belum siap — coba lagi
+      return;
+    }
+    const rows = buf.splice(0, buf.length).map((m) => ({
+      tableId: room.dbId!,
+      seq: m.seq,
+      seatIndex: m.seatIndex,
+      kind: m.kind,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      payload: m.payload as any,
+    }));
+    try {
+      await this.prisma.move.createMany({ data: rows, skipDuplicates: true });
+    } catch (e) {
+      this.logger.warn(`flushMoves gagal: ${(e as Error).message}`);
     }
   }
 
