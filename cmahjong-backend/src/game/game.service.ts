@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ChainService } from "../chain/chain.service";
-import { Round, RoundOutcome } from "./round";
+import { CallClaim, CallResolution, Round, RoundOutcome } from "./round";
 import { Hanchan, HanchanLength } from "./hanchan";
 
 interface Room {
@@ -122,28 +122,13 @@ export class GameService {
     return this.round(chainGameId).availableCalls();
   }
 
-  pass(chainGameId: string): RoundOutcome | null {
-    return this.round(chainGameId).pass();
-  }
-
-  pon(chainGameId: string, seat: number): void {
-    this.round(chainGameId).callPon(seat);
-  }
-
-  chi(chainGameId: string, seat: number, low: number): void {
-    this.round(chainGameId).callChi(seat, low);
-  }
-
-  kan(chainGameId: string, seat: number): RoundOutcome | null {
-    return this.round(chainGameId).callKan(seat);
+  /** Respons call seorang pemain (pon/chi/kan/ron/pass); resolusi prioritas otomatis. */
+  respond(chainGameId: string, seat: number, claim: CallClaim): CallResolution {
+    return this.round(chainGameId).respond(seat, claim);
   }
 
   ankan(chainGameId: string, seat: number, kind: number): RoundOutcome | null {
     return this.round(chainGameId).ankan(seat, kind);
-  }
-
-  ron(chainGameId: string, seat: number): RoundOutcome {
-    return this.round(chainGameId).callRon(seat);
   }
 
   /**

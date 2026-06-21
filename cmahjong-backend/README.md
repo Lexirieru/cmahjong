@@ -22,7 +22,8 @@ src/
     signer.ts      EIP-712 GameResult (untuk settleByServer)
     chain.service  baca game on-chain + tandatangan server
   game/          State machine + realtime
-    round.ts       mekanik 1 ronde: draw/discard/call(pon/chi/kan)/ankan/riichi/
+    round.ts       mekanik 1 ronde: draw/discard, call berprioritas (ron>pon/kan>chi),
+                   ankan/shouminkan, riichi/double-riichi, ippatsu, furiten,
                    tsumo/ron/exhaustive draw + noten payment
     hanchan.ts     orkestrasi multi-ronde: rotasi dealer, wind East→South,
                    honba, riichi sticks, renchan, ranking final
@@ -57,18 +58,19 @@ npm run test:engine # hanya engine
 
 ## Status & roadmap
 
-Sudah jalan & teruji (49 test):
+Sudah jalan & teruji (55 test):
 - Engine deterministik, agari (3 bentuk), yaku inti + yakuman, scoring fu/han
 - Scoring dengan **meld terbuka & kan** (dora atas seluruh ubin)
 - Mekanik ronde lengkap: **call pon/chi/daiminkan**, **ankan/shouminkan** (+rinshan/kan-dora),
-  riichi (cek tenpai), tsumo, ron, exhaustive draw + **noten payment**
+  riichi + **double riichi**, **ippatsu**, **furiten** (permanen/sementara/riichi),
+  tsumo, ron, exhaustive draw + **noten payment**
+- **Prioritas call** (ron > pon/kan > chi) via pengumpulan respons pemain + head-bump
 - **Hanchan** multi-ronde: rotasi dealer, East→South, **honba**, **riichi sticks**,
   renchan (dealer menang/tenpai), ranking final
 - commit/seed mirror kontrak, EIP-712 signer, gateway WS, skema Postgres
 
 TODO lanjutan:
-- Furiten penuh, ippatsu, uradora, chankan (rob kan), multi-ron
-- Prioritas call bersamaan (ron > pon/kan > chi) di level orkestrator
+- uradora, chankan (rob kan), multi-ron (double/triple ron)
 - Persist penuh state ronde ke Postgres (replay/resume)
 - Auth pemain (verifikasi tanda tangan wallet) di gateway
 - Endpoint settle: relay ranking + signature ke kontrak

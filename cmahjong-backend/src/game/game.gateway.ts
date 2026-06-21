@@ -94,37 +94,16 @@ export class GameGateway implements OnGatewayConnection {
     return { ok: true };
   }
 
-  @SubscribeMessage("pass")
-  async onPass(@MessageBody() body: { gameId: string }) {
-    const outcome = this.games.pass(body.gameId);
-    this.broadcastState(body.gameId);
-    if (outcome) await this.emitOutcome(body.gameId, outcome);
-    return { ok: true };
-  }
-
-  @SubscribeMessage("pon")
-  onPon(@MessageBody() body: { gameId: string; address: string }) {
+  @SubscribeMessage("call")
+  async onCall(
+    @MessageBody()
+    body: { gameId: string; address: string; action: "pon" | "chi" | "kan" | "ron" | "pass"; low?: number },
+  ) {
     const seat = this.games.seatOf(body.gameId, body.address);
-    this.games.pon(body.gameId, seat);
+    const res = this.games.respond(body.gameId, seat, { type: body.action, low: body.low });
     this.broadcastState(body.gameId);
-    return { ok: true };
-  }
-
-  @SubscribeMessage("chi")
-  onChi(@MessageBody() body: { gameId: string; address: string; low: number }) {
-    const seat = this.games.seatOf(body.gameId, body.address);
-    this.games.chi(body.gameId, seat, body.low);
-    this.broadcastState(body.gameId);
-    return { ok: true };
-  }
-
-  @SubscribeMessage("kan")
-  async onKan(@MessageBody() body: { gameId: string; address: string }) {
-    const seat = this.games.seatOf(body.gameId, body.address);
-    const outcome = this.games.kan(body.gameId, seat);
-    this.broadcastState(body.gameId);
-    if (outcome) await this.emitOutcome(body.gameId, outcome);
-    return { ok: true };
+    if (res.resolved && res.outcome) await this.emitOutcome(body.gameId, res.outcome);
+    return { ok: true, resolved: res.resolved, action: res.action };
   }
 
   @SubscribeMessage("ankan")
@@ -140,14 +119,6 @@ export class GameGateway implements OnGatewayConnection {
   async onTsumo(@MessageBody() body: { gameId: string; address: string }) {
     const seat = this.games.seatOf(body.gameId, body.address);
     const outcome = this.games.tsumo(body.gameId, seat);
-    await this.emitOutcome(body.gameId, outcome);
-    return { ok: true };
-  }
-
-  @SubscribeMessage("ron")
-  async onRon(@MessageBody() body: { gameId: string; address: string }) {
-    const seat = this.games.seatOf(body.gameId, body.address);
-    const outcome = this.games.ron(body.gameId, seat);
     await this.emitOutcome(body.gameId, outcome);
     return { ok: true };
   }

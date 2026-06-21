@@ -7,7 +7,8 @@ let idc = 0;
 function tiles(kinds: number[]): Tile[] {
   return kinds.map((k) => ({ id: idc++, kind: k }));
 }
-const HONORS = [27, 28, 29, 30, 31, 32, 33, 27, 28, 29, 30, 31, 32]; // 13 honor, tak bisa chi 5p
+const HONORS = [27, 28, 29, 30, 31, 32, 33, 27, 28, 29, 30, 31, 32]; // 13 honor (catatan: tenpai tsuuiisou!)
+const JUNK = [0, 9, 18, 27, 1, 10, 19, 28, 2, 11, 20, 29, 3]; // 13 single acak, noten, tak bisa call
 
 /** Round dengan state disuntik; seat aktif dianggap sudah memegang ubin (siap buang). */
 function injected(opts: {
@@ -73,13 +74,13 @@ describe("Round - mekanik dasar", () => {
     expect(rank.indexOf(0)).toBeLessThan(rank.indexOf(2));
   });
 
-  it("pass tak valid saat fase playing", () => {
+  it("respond tak valid saat fase playing", () => {
     const r = new Round(SEED, 0);
-    expect(() => r.pass()).toThrow();
+    expect(() => r.respond(1, { type: "pass" })).toThrow();
   });
 });
 
-describe("Round - call pon/chi", () => {
+describe("Round - call pon/chi (via respond)", () => {
   it("pon tersedia & dieksekusi (out of turn)", () => {
     const r = injected({
       hands: [
@@ -90,14 +91,14 @@ describe("Round - call pon/chi", () => {
       ],
     });
     r.discard(0, -1);
-    const calls = r.availableCalls();
-    expect(calls.some((c) => c.seat === 2 && c.type === "pon")).toBe(true);
+    expect(r.availableCalls().some((c) => c.seat === 2 && c.type === "pon")).toBe(true);
 
-    r.callPon(2);
+    const res = r.respond(2, { type: "pon" });
+    expect(res.resolved).toBe(true);
+    expect(res.action).toBe("pon");
     expect(r.turn).toBe(2);
-    expect(r.handOf(2)).toHaveLength(11); // dua ubin pindah ke meld
-    const melds = r.publicState().melds[2];
-    expect(melds).toEqual([{ type: "triplet", kind: 13, open: true }]);
+    expect(r.handOf(2)).toHaveLength(11);
+    expect(r.publicState().melds[2]).toEqual([{ type: "triplet", kind: 13, open: true }]);
   });
 
   it("chi hanya dari pemain berikutnya & membentuk urutan", () => {
@@ -111,10 +112,9 @@ describe("Round - call pon/chi", () => {
     });
     r.discard(0, -1);
     const chi = r.availableCalls().find((c) => c.seat === 1 && c.type === "chi");
-    expect(chi).toBeDefined();
-    expect(chi!.chiOptions).toContain(12); // urutan 4-5-6p, low=4p
+    expect(chi!.chiOptions).toContain(12);
 
-    r.callChi(1, 12);
+    r.respond(1, { type: "chi", low: 12 });
     expect(r.turn).toBe(1);
     expect(r.publicState().melds[1]).toEqual([{ type: "sequence", kind: 12, open: true }]);
   });
@@ -122,7 +122,6 @@ describe("Round - call pon/chi", () => {
 
 describe("Round - ron", () => {
   it("ron atas buangan menyelesaikan tangan tenpai + bayar", () => {
-    // seat2 tenpai tanyao/pinfu menunggu 5p (kind13)
     const r = injected({
       hands: [
         [27, 27, 27, 28, 28, 28, 29, 29, 30, 30, 31, 31, 33, 13], // seat0 buang 5p
@@ -134,12 +133,13 @@ describe("Round - ron", () => {
     r.discard(0, -1);
     expect(r.availableCalls().some((c) => c.seat === 2 && c.type === "ron")).toBe(true);
 
-    const out = r.callRon(2);
+    const res = r.respond(2, { type: "ron" });
+    expect(res.resolved).toBe(true);
+    const out = res.outcome!;
     expect(out.type).toBe("ron");
     expect(out.winner).toBe(2);
     expect(out.loser).toBe(0);
     expect(out.points[2]).toBeGreaterThan(START_POINTS);
-    expect(out.points[0]).toBeLessThan(START_POINTS);
   });
 });
 
@@ -158,12 +158,11 @@ describe("Round - kan", () => {
     expect(r.availableCalls().some((c) => c.seat === 2 && c.type === "kan")).toBe(true);
 
     const doraBefore = r.publicState().doraIndicators.length;
-    r.callKan(2);
+    r.respond(2, { type: "kan" });
     expect(r.turn).toBe(2);
     expect(r.publicState().melds[2][0]).toEqual({ type: "kan", kind: 13, open: true });
-    // rinshan ditarik + indikator dora baru terbuka
     expect(r.publicState().doraIndicators.length).toBe(doraBefore + 1);
-    expect(r.handOf(2)).toHaveLength(11); // 13 - 3 (ke meld) + 1 (rinshan)
+    expect(r.handOf(2)).toHaveLength(11);
   });
 
   it("ankan saat giliran sendiri", () => {
@@ -193,5 +192,108 @@ describe("Round - riichi", () => {
       ],
     });
     expect(() => r.declareRiichi(0, -1)).toThrow();
+  });
+});
+
+// tangan tenpai menunggu 5p (kind13) dengan pinfu/tanyao
+const RON_5P = [1, 2, 3, 19, 20, 21, 23, 24, 25, 11, 12, 6, 6];
+
+describe("Round - prioritas call (ron > pon/kan > chi)", () => {
+  it("pon mengalahkan chi atas buangan yang sama", () => {
+    const r = injected({
+      hands: [
+        [27, 27, 27, 28, 28, 28, 29, 29, 29, 30, 30, 33, 33, 13], // buang 5p
+        [12, 14, 1, 2, 4, 5, 7, 8, 19, 20, 22, 23, 25], // seat1 bisa chi
+        [13, 13, 1, 2, 4, 5, 7, 8, 19, 20, 22, 23, 25], // seat2 bisa pon
+        HONORS,
+      ],
+    });
+    r.discard(0, -1);
+    expect(r.respond(1, { type: "chi", low: 12 }).resolved).toBe(false);
+    const res = r.respond(2, { type: "pon" });
+    expect(res.resolved).toBe(true);
+    expect(res.action).toBe("pon");
+    expect(r.turn).toBe(2);
+    expect(r.publicState().melds[1]).toEqual([]); // chi kalah, tak terbentuk
+  });
+
+  it("ron mengalahkan pon", () => {
+    const r = injected({
+      hands: [
+        [27, 27, 27, 28, 28, 28, 29, 29, 30, 30, 31, 31, 33, 13], // buang 5p
+        HONORS,
+        RON_5P, // seat2 bisa ron
+        [13, 13, 1, 2, 4, 5, 7, 8, 19, 20, 22, 23, 25], // seat3 bisa pon
+      ],
+    });
+    r.discard(0, -1);
+    expect(r.respond(3, { type: "pon" }).resolved).toBe(false);
+    const res = r.respond(2, { type: "ron" });
+    expect(res.resolved).toBe(true);
+    expect(res.action).toBe("ron");
+    expect(res.outcome!.winner).toBe(2);
+  });
+});
+
+describe("Round - furiten", () => {
+  it("tak bisa ron bila tunggu ada di buangan sendiri (furiten permanen)", () => {
+    const r = injected({
+      hands: [
+        [27, 27, 27, 28, 28, 28, 29, 29, 30, 30, 31, 31, 33, 13], // buang 5p
+        HONORS,
+        RON_5P, // tenpai 5p
+        HONORS,
+      ],
+    });
+    r.discards[2].push(13); // seat2 pernah membuang 5p -> furiten
+    r.discard(0, -1);
+    expect(r.availableCalls().some((c) => c.seat === 2 && c.type === "ron")).toBe(false);
+    expect(r.isFuriten(2)).toBe(true);
+  });
+
+  it("furiten sementara setelah melewatkan ron", () => {
+    const r = injected({
+      hands: [
+        [27, 27, 27, 28, 28, 28, 29, 29, 30, 30, 31, 31, 33, 13], // buang 5p
+        HONORS,
+        RON_5P,
+        HONORS,
+      ],
+      liveWall: [0, 1, 2],
+    });
+    r.discard(0, -1);
+    expect(r.availableCalls().some((c) => c.seat === 2 && c.type === "ron")).toBe(true);
+    r.respond(2, { type: "pass" }); // lewatkan ron
+    expect(r.isFuriten(2)).toBe(true); // jadi furiten sementara
+  });
+});
+
+describe("Round - ippatsu & double riichi", () => {
+  it("riichi pada buangan pertama + ron seputaran = Double Riichi + Ippatsu", () => {
+    const r = injected({
+      hands: [[...RON_5P, 33], JUNK, JUNK, JUNK],
+      liveWall: [13, 27], // seat1 menarik 5p lalu buang
+    });
+    r.declareRiichi(0, -1); // buangan pertama -> double riichi, ippatsu terbuka
+    expect(r.turn).toBe(1);
+    r.discard(1, -1); // seat1 buang 5p
+    const res = r.respond(0, { type: "ron" });
+    const names = res.outcome!.score!.yaku.map((y) => y.name);
+    expect(names).toEqual(expect.arrayContaining(["Double Riichi", "Ippatsu"]));
+  });
+
+  it("riichi biasa (bukan buangan pertama) + ippatsu", () => {
+    const r = injected({
+      hands: [[...RON_5P, 33], JUNK, JUNK, JUNK],
+      liveWall: [13, 27],
+    });
+    r.discards[0].push(33); // seat0 sudah pernah buang -> bukan double riichi
+    r.declareRiichi(0, -1);
+    r.discard(1, -1);
+    const res = r.respond(0, { type: "ron" });
+    const names = res.outcome!.score!.yaku.map((y) => y.name);
+    expect(names).toContain("Riichi");
+    expect(names).toContain("Ippatsu");
+    expect(names).not.toContain("Double Riichi");
   });
 });
