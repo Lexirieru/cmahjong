@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# Build / artifacts
+cmahjong-frontend/.next/
+cmahjong-frontend/out/
+cmahjong-frontend/build/
+cmahjong-contract/cache/
+cmahjong-contract/out/
+cmahjong-contract/broadcast/*/31337/
+cmahjong-contract/broadcast/**/dry-run/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Misc
+.DS_Store
+*.tsbuildinfo
+.vercel
