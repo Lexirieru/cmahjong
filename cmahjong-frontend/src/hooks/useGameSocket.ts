@@ -10,8 +10,9 @@ export interface RoundEnd {
   settle?: { ranking: string[] };
 }
 
-/** Berlangganan state game realtime + tangan privat, dan expose aksi. */
-export function useGameSocket(gameId: string, address: Address, seat: number) {
+/** Berlangganan state game realtime + tangan privat, dan expose aksi.
+ *  `autoStart`: kirim "start" agar backend memulai ronde (membaca seed/pemain on-chain). */
+export function useGameSocket(gameId: string, address: Address, seat: number, autoStart = false) {
   const [state, setState] = useState<PublicState | null>(null);
   const [hand, setHand] = useState<Tile[]>([]);
   const [end, setEnd] = useState<RoundEnd | null>(null);
@@ -22,6 +23,7 @@ export function useGameSocket(gameId: string, address: Address, seat: number) {
     const onConnect = () => {
       setConnected(true);
       s.emit("join", { gameId, address });
+      if (autoStart) s.emit("start", { gameId }); // idempoten di backend
     };
     const onState = (st: PublicState) => setState(st);
     const onHand = (h: { seat: number; tiles: Tile[] }) => {
@@ -44,7 +46,7 @@ export function useGameSocket(gameId: string, address: Address, seat: number) {
       s.off("roundEnd", onRoundEnd);
       s.off("disconnect", onDisconnect);
     };
-  }, [gameId, address, seat]);
+  }, [gameId, address, seat, autoStart]);
 
   const discard = useCallback(
     (tileId: number) => getSocket().emit("discard", { gameId, address, tileId }),

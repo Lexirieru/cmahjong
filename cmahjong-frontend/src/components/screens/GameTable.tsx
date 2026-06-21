@@ -46,7 +46,7 @@ export function GameTable({
   seat: number;
   onExit: () => void;
 }) {
-  const live = useGameSocket(gameId.toString(), address, seat);
+  const live = useGameSocket(gameId.toString(), address, seat, gameId > 0n);
   const state = live.state ?? DEMO_STATE;
   const hand = live.hand.length ? live.hand : DEMO_HAND;
   const isDemo = !live.state;

@@ -46,6 +46,10 @@ export class GameService {
     chainGameId: string,
     opts?: { players?: string[]; seed?: string; length?: HanchanLength },
   ): Promise<Room> {
+    // idempoten: bila game sudah berjalan, kembalikan yang ada (banyak klien bisa memicu start)
+    const existing = this.rooms.get(chainGameId);
+    if (existing) return existing;
+
     let players = opts?.players;
     let seed = opts?.seed;
 
