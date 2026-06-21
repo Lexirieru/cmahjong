@@ -9,6 +9,7 @@ import {
 } from "@nestjs/websockets";
 import { Server, Socket } from "socket.io";
 import { GameService } from "./game.service";
+import { SettlementService } from "../settlement/settlement.service";
 import { RoundOutcome } from "./round";
 
 /**
@@ -34,7 +35,10 @@ export class GameGateway implements OnGatewayConnection {
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly games: GameService) {}
+  constructor(
+    private readonly games: GameService,
+    private readonly settlement: SettlementService,
+  ) {}
 
   handleConnection(client: Socket) {
     this.logger.debug(`klien terhubung: ${client.id}`);
@@ -133,11 +137,22 @@ export class GameGateway implements OnGatewayConnection {
     return { ok: true };
   }
 
+  /** Pemain mengirim tanda tangan EIP-712 atas ranking final (settle kooperatif). */
+  @SubscribeMessage("submitSignature")
+  async onSubmitSignature(@MessageBody() body: { gameId: string; signature: string }) {
+    const settle = await this.settlement.addSignature(body.gameId, body.signature);
+    this.server.to(body.gameId).emit("settleUpdate", settle);
+    return { ok: true, status: settle.status };
+  }
+
   private async emitOutcome(gameId: string, outcome: RoundOutcome) {
     // catat ke hanchan: lanjut ronde berikut, atau selesai + settle payload
     const end = await this.games.recordOutcome(gameId, outcome);
     this.server.to(gameId).emit("roundEnd", end);
-    if (!end.finished) {
+    if (end.finished) {
+      // game selesai — minta para pemain menandatangani ranking final
+      this.server.to(gameId).emit("settleReady", end.settle);
+    } else {
       // ronde baru dimulai — klien me-refresh tangan via "join"
       this.broadcastState(gameId);
       this.server.to(gameId).emit("newRound", this.games.hanchanState(gameId));
