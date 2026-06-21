@@ -7,6 +7,7 @@ const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "cMahjong",
   description: "Play 4-player mahjong. Stake stablecoins. Winner takes the pot.",
+  icons: { icon: "/logos/cmahjong.png", apple: "/logos/cmahjong.png" },
 };
 
 export const viewport: Viewport = {

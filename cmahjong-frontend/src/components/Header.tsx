@@ -7,7 +7,9 @@ import type { Balances } from "@/hooks/useBalances";
 export function Header({ address, balances }: { address: Address | null; balances: Balances }) {
   return (
     <header className="flex items-center justify-between px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
-      <div className="flex items-baseline gap-1.5">
+      <div className="flex items-center gap-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logos/cmahjong.png" alt="" width={28} height={28} className="select-none" />
         <span className="text-xl font-bold tracking-tight">cMahjong</span>
         <span className="text-gold-400">·</span>
         <span className="text-xs text-ivory/55">Celo</span>

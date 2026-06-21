@@ -2,7 +2,6 @@
 
 import type { Address } from "viem";
 import { Button } from "@/components/Button";
-import { Tile } from "@/components/Tile";
 
 interface Props {
   address: Address | null;
@@ -14,27 +13,19 @@ interface Props {
 }
 
 export function Home({ address, inMiniPay, connecting, connect, onCreate, onJoin }: Props) {
-  // tata letak kipas ubin dekoratif (naga + terminal)
-  const decor = [31, 33, 0, 8, 32];
-
   return (
     <div className="flex flex-1 flex-col px-5">
       <div className="flex flex-1 flex-col items-center justify-center text-center">
-        <div className="mb-8 flex items-end justify-center">
-          {decor.map((k, i) => (
-            <div
-              key={i}
-              className="rise"
-              style={{
-                marginLeft: i ? -10 : 0,
-                transform: `rotate(${(i - 2) * 7}deg) translateY(${Math.abs(i - 2) * 6}px)`,
-                animationDelay: `${i * 60}ms`,
-                zIndex: i,
-              }}
-            >
-              <Tile kind={k} width={48} />
-            </div>
-          ))}
+        <div className="rise mb-7 relative">
+          <div className="absolute inset-0 -z-10 rounded-full bg-gold-400/20 blur-2xl" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logos/cmahjong.png"
+            alt="cMahjong"
+            width={132}
+            height={132}
+            className="drop-shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
+          />
         </div>
 
         <h1 className="max-w-[15rem] text-[28px] font-bold leading-[1.1] tracking-tight">
