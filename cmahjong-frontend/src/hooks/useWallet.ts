@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Address } from "viem";
 import { isMiniPay, requestAccounts } from "@/lib/minipay";
+import { ensureCeloChain } from "@/lib/chain";
 
 /**
  * Koneksi dompet. Di MiniPay koneksi otomatis (tombol connect disembunyikan);
@@ -18,6 +19,8 @@ export function useWallet() {
     try {
       const acc = await requestAccounts();
       setAddress((acc as Address) ?? null);
+      // langsung arahkan wallet ke Celo begitu terhubung (no-op di MiniPay)
+      if (acc) await ensureCeloChain().catch(() => {});
     } finally {
       setConnecting(false);
     }
