@@ -44,6 +44,7 @@ export class ChainService {
   private readonly chainId: number;
   private readonly serverWallet?: Wallet;
   private readonly contract?: Contract;
+  private readonly writeContract?: Contract;
 
   constructor() {
     const rpc = process.env.CELO_RPC ?? "https://forno.celo.org";
@@ -56,8 +57,11 @@ export class ChainService {
     }
     if (this.contractAddress) {
       this.contract = new Contract(this.contractAddress, MAHJONG_ABI, this.provider);
+      if (this.serverWallet) {
+        this.writeContract = new Contract(this.contractAddress, MAHJONG_ABI, this.serverWallet);
+      }
     } else {
-      this.logger.warn("MAHJONG_ADDRESS belum diset — pembacaan on-chain dinonaktifkan");
+      this.logger.warn("MAHJONG_ADDRESS belum diset — interaksi on-chain dinonaktifkan");
     }
   }
 
@@ -118,5 +122,37 @@ export class ChainService {
   ): Promise<string> {
     if (!this.serverWallet) throw new Error("SERVER_PRIVATE_KEY belum diset");
     return signResult(this.serverWallet, this.contractAddress, this.chainId, chainGameId, ranking);
+  }
+
+  /**
+   * Submit settle KOOPERATIF (4 tanda tangan pemain). Siapa pun boleh memanggil;
+   * server membayar gas. Mengembalikan tx hash setelah dikonfirmasi.
+   */
+  async submitSettle(
+    chainGameId: bigint,
+    ranking: [string, string, string, string],
+    signatures: [string, string, string, string],
+  ): Promise<string> {
+    if (!this.writeContract) throw new Error("server wallet/kontrak belum dikonfigurasi");
+    const tx = await this.writeContract.settle(chainGameId, ranking, signatures);
+    const receipt = await tx.wait();
+    this.logger.log(`settle game ${chainGameId} -> ${receipt.hash}`);
+    return receipt.hash;
+  }
+
+  /**
+   * Submit settleByServer (fallback). Hanya valid on-chain setelah settleDeadline;
+   * kontrak yang menegakkannya.
+   */
+  async submitSettleByServer(
+    chainGameId: bigint,
+    ranking: [string, string, string, string],
+    serverSig: string,
+  ): Promise<string> {
+    if (!this.writeContract) throw new Error("server wallet/kontrak belum dikonfigurasi");
+    const tx = await this.writeContract.settleByServer(chainGameId, ranking, serverSig);
+    const receipt = await tx.wait();
+    this.logger.log(`settleByServer game ${chainGameId} -> ${receipt.hash}`);
+    return receipt.hash;
   }
 }
