@@ -44,9 +44,11 @@ export interface CallResolution {
 
 export interface RoundOutcome {
   type: "tsumo" | "ron" | "draw";
-  winner?: number;
+  winner?: number; // pemenang utama (head-bump untuk ron ganda)
+  winners?: number[]; // semua pemenang (multi-ron)
   loser?: number;
-  score?: ScoreResult;
+  score?: ScoreResult; // skor pemenang utama
+  scores?: ScoreResult[]; // skor tiap pemenang (multi-ron, selaras winners)
   points: number[];
   tenpai?: boolean[];
 }
@@ -74,10 +76,12 @@ export class Round {
   private hands: Tile[][];
   private liveWall: Tile[];
   private deadWall: Tile[];
-  private kanCount = 0;
+  private kansDone = 0;
   melds: Meld[][] = [[], [], [], []];
   discards: number[][] = [[], [], [], []];
   doraIndicators: number[] = [];
+  private uraIndicators: number[] = []; // dibuka hanya saat menang riichi (tak di publicState)
+  private chankan: { seat: number; kind: number } | null = null;
   riichi: boolean[] = [false, false, false, false];
   private riichiDouble: boolean[] = [false, false, false, false];
   private ippatsu: boolean[] = [false, false, false, false];
@@ -103,6 +107,7 @@ export class Round {
       liveWall: Tile[];
       deadWall?: Tile[];
       doraIndicator?: number;
+      uraIndicator?: number;
       turn?: number;
       skipInitialDraw?: boolean;
     },
@@ -116,6 +121,7 @@ export class Round {
       this.liveWall = inject.liveWall;
       this.deadWall = inject.deadWall ?? [];
       this.doraIndicators = [inject.doraIndicator ?? 0];
+      this.uraIndicators = [inject.uraIndicator ?? this.deadWall[1]?.kind ?? 1];
       this.turn = inject.turn ?? dealer;
       if (inject.skipInitialDraw) {
         this.awaitingDiscard = true;
@@ -131,7 +137,9 @@ export class Round {
     this.hands = dealt.hands;
     this.liveWall = dealt.liveWall;
     this.deadWall = dealt.deadWall;
-    this.doraIndicators = [dealt.doraIndicator.kind];
+    // layout dead wall: dora indikator di indeks genap, ura di ganjil (interleaved)
+    this.doraIndicators = [this.deadWall[0].kind];
+    this.uraIndicators = [this.deadWall[1].kind];
 
     this.turn = dealer;
     this.drawForCurrent();
@@ -159,10 +167,12 @@ export class Round {
   private drawForCurrent(rinshan = false): Tile | null {
     let tile: Tile | undefined;
     if (rinshan) {
-      tile = this.deadWall[this.kanCount];
-      this.kanCount++;
-      const di = this.deadWall[this.kanCount];
-      if (di) this.doraIndicators.push(di.kind);
+      // rinshan diambil dari belakang dead wall; indikator dora/ura baru dari depan
+      tile = this.deadWall[this.deadWall.length - 1 - this.kansDone];
+      this.kansDone++;
+      const dIdx = 2 * this.kansDone;
+      if (this.deadWall[dIdx]) this.doraIndicators.push(this.deadWall[dIdx].kind);
+      if (this.deadWall[dIdx + 1]) this.uraIndicators.push(this.deadWall[dIdx + 1].kind);
     } else {
       if (this.liveWall.length === 0) return null;
       tile = this.liveWall.shift();
@@ -177,7 +187,12 @@ export class Round {
   }
 
   // ---------------------------------------------------------------- scoring
-  private buildScore(seat: number, isTsumo: boolean, winningTile: number): ScoreResult {
+  private buildScore(
+    seat: number,
+    isTsumo: boolean,
+    winningTile: number,
+    opts?: { chankan?: boolean },
+  ): ScoreResult {
     const counts = toCounts(this.hands[seat]);
     const ctx: WinContext = {
       seatWind: this.seatWind(seat),
@@ -189,6 +204,7 @@ export class Round {
       doubleRiichi: this.riichiDouble[seat],
       ippatsu: this.ippatsu[seat],
       rinshan: isTsumo && this.rinshanPending,
+      chankan: opts?.chankan,
       haitei: isTsumo && this.liveWall.length === 0,
       houtei: !isTsumo && this.liveWall.length === 0,
     };
@@ -197,6 +213,7 @@ export class Round {
       openMelds: this.melds[seat],
       ctx,
       doraIndicators: this.doraIndicators,
+      uraIndicators: this.uraIndicators, // hanya dihitung bila riichi (di score.ts)
       aka: 0,
       isDealer: seat === this.dealer,
     });
@@ -285,18 +302,71 @@ export class Round {
     return null;
   }
 
+  /** Shouminkan (tambah ke pon). Bisa dirampok (chankan) oleh penunggu ubin tsb. */
   addedKan(seat: number, kind: number): RoundOutcome | null {
     this.ensure("playing");
     if (seat !== this.turn || !this.awaitingDiscard) throw new Error("bukan giliran seat ini");
     const meld = this.melds[seat].find((m) => m.type === "triplet" && m.kind === kind && m.open);
     if (!meld) throw new Error("tidak ada pon untuk ditambah");
     if (toCounts(this.hands[seat])[kind] < 1) throw new Error("tidak punya ubin ke-4");
+
+    // tawarkan chankan (rob the kan) sebelum kan selesai
+    const robbers = this.computeChankanRobbers(seat, kind);
+    if (robbers.length) {
+      this.chankan = { seat, kind };
+      this.pendingCalls = robbers.map((s) => ({ seat: s, type: "ron" as const }));
+      this.responses.clear();
+      this.phase = "awaitingCalls";
+      return null;
+    }
+    return this.completeAddedKan(seat, kind);
+  }
+
+  private completeAddedKan(seat: number, kind: number): RoundOutcome | null {
     this.clearIppatsu();
+    const meld = this.melds[seat].find((m) => m.type === "triplet" && m.kind === kind && m.open)!;
     this.removeFromHand(seat, kind, 1);
     meld.type = "kan";
+    this.phase = "playing";
+    this.pendingCalls = [];
+    this.turn = seat;
     const drawn = this.drawForCurrent(true);
     if (drawn === null) return this.exhaustiveDraw();
     return null;
+  }
+
+  /** Penunggu yang bisa merampok shouminkan (tenpai, bukan furiten, ada yaku). */
+  private computeChankanRobbers(kanSeat: number, kind: number): number[] {
+    const out: number[] = [];
+    for (let seat = 0; seat < SEATS; seat++) {
+      if (seat === kanSeat || this.isFuriten(seat)) continue;
+      const temp = toCounts(this.hands[seat]);
+      temp[kind]++;
+      const ctx: WinContext = {
+        seatWind: this.seatWind(seat),
+        roundWind: this.roundWind,
+        winningTile: kind,
+        isTsumo: false,
+        isMenzen: this.isMenzen(seat),
+        riichi: this.riichi[seat],
+        doubleRiichi: this.riichiDouble[seat],
+        ippatsu: this.ippatsu[seat],
+        chankan: true,
+      };
+      if (
+        scoreHand({
+          counts: temp,
+          openMelds: this.melds[seat],
+          ctx,
+          doraIndicators: this.doraIndicators,
+          uraIndicators: this.uraIndicators,
+          isDealer: seat === this.dealer,
+        }).agari
+      ) {
+        out.push(seat);
+      }
+    }
+    return out;
   }
 
   private advance(): RoundOutcome | null {
@@ -397,9 +467,6 @@ export class Round {
   /** Paksa resolusi (mis. timeout): seat tanpa respons dianggap pass. */
   resolveCalls(): CallResolution {
     this.ensure("awaitingCalls");
-    const from = this.lastDiscard!.seat;
-    const order = (s: number) => (s - from + SEATS) % SEATS; // kedekatan searah giliran
-
     const claimOf = (s: number): ClaimType =>
       (this.responses.get(s)?.type ?? "pass") as ClaimType;
 
@@ -411,13 +478,19 @@ export class Round {
       }
     }
 
-    // prioritas: ron > pon/kan > chi
+    // chankan (rob the kan): hanya ron yang mungkin
+    if (this.chankan) return this.resolveChankan(claimOf);
+
+    const from = this.lastDiscard!.seat;
+    const order = (s: number) => (s - from + SEATS) % SEATS; // kedekatan searah giliran
+
+    // prioritas: ron (boleh ganda) > pon/kan > chi
     const rons = this.pendingCalls
       .filter((c) => c.type === "ron" && claimOf(c.seat) === "ron")
       .map((c) => c.seat)
       .sort((a, b) => order(a) - order(b));
     if (rons.length) {
-      const outcome = this.applyRon(rons[0]); // head bump: terdekat dari pembuang
+      const outcome = this.applyRons(rons, this.lastDiscard!.kind, from);
       return { resolved: true, action: "ron", outcome };
     }
 
@@ -445,25 +518,59 @@ export class Round {
     return { resolved: true, action: "pass", outcome: this.advance() };
   }
 
+  private resolveChankan(claimOf: (s: number) => ClaimType): CallResolution {
+    const { seat: kanSeat, kind } = this.chankan!;
+    const robbers = this.pendingCalls
+      .filter((c) => claimOf(c.seat) === "ron")
+      .map((c) => c.seat)
+      .sort((a, b) => ((a - kanSeat + SEATS) % SEATS) - ((b - kanSeat + SEATS) % SEATS));
+    if (robbers.length) {
+      this.chankan = null;
+      const outcome = this.applyRons(robbers, kind, kanSeat, { chankan: true });
+      return { resolved: true, action: "ron", outcome };
+    }
+    // tak ada yang merampok -> selesaikan kan
+    this.chankan = null;
+    this.responses.clear();
+    const outcome = this.completeAddedKan(kanSeat, kind);
+    return { resolved: true, action: "pass", outcome };
+  }
+
   private clearIppatsu(): void {
     this.ippatsu = [false, false, false, false];
     this.anyCall = true;
   }
 
-  private applyRon(seat: number): RoundOutcome {
-    const winTile = this.lastDiscard!.kind;
-    this.hands[seat].push({ id: -1, kind: winTile });
-    const result = this.buildScore(seat, false, winTile);
-    if (!result.agari) {
-      this.hands[seat].pop();
-      throw new Error("bukan tangan menang (ron)");
+  /** Terapkan satu atau lebih ron (multi-ron). Pemenang utama = terdekat dari pembuang. */
+  private applyRons(
+    seats: number[],
+    winTile: number,
+    loser: number,
+    opts?: { chankan?: boolean },
+  ): RoundOutcome {
+    const scores: ScoreResult[] = [];
+    for (const seat of seats) {
+      this.hands[seat].push({ id: -1, kind: winTile });
+      const result = this.buildScore(seat, false, winTile, opts);
+      if (!result.agari) {
+        this.hands[seat].pop();
+        throw new Error("bukan tangan menang (ron)");
+      }
+      const pay = result.payments!.ron!;
+      this.points[loser] -= pay;
+      this.points[seat] += pay;
+      scores.push(result);
     }
-    const loser = this.lastDiscard!.seat;
-    const pay = result.payments!.ron!;
-    this.points[loser] -= pay;
-    this.points[seat] += pay;
     this.phase = "ended";
-    return { type: "ron", winner: seat, loser, score: result, points: this.points.slice() };
+    return {
+      type: "ron",
+      winner: seats[0],
+      winners: seats,
+      loser,
+      score: scores[0],
+      scores,
+      points: this.points.slice(),
+    };
   }
 
   private takeDiscardForMeld(): number {

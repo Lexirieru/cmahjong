@@ -60,17 +60,18 @@ npm run test:engine # hanya engine
 
 Sudah jalan & teruji (55 test):
 - Engine deterministik, agari (3 bentuk), yaku inti + yakuman, scoring fu/han
-- Scoring dengan **meld terbuka & kan** (dora atas seluruh ubin)
+- Scoring dengan **meld terbuka & kan**, **dora + kan-dora + uradora** (ura hanya saat riichi)
 - Mekanik ronde lengkap: **call pon/chi/daiminkan**, **ankan/shouminkan** (+rinshan/kan-dora),
   riichi + **double riichi**, **ippatsu**, **furiten** (permanen/sementara/riichi),
-  tsumo, ron, exhaustive draw + **noten payment**
-- **Prioritas call** (ron > pon/kan > chi) via pengumpulan respons pemain + head-bump
+  **chankan** (rob the kan), tsumo, ron, exhaustive draw + **noten payment**
+- **Prioritas call** (ron > pon/kan > chi) + **multi-ron** (double/triple ron) via
+  pengumpulan respons pemain + head-bump
 - **Hanchan** multi-ronde: rotasi dealer, East→South, **honba**, **riichi sticks**,
   renchan (dealer menang/tenpai), ranking final
 - commit/seed mirror kontrak, EIP-712 signer, gateway WS, skema Postgres
 
 TODO lanjutan:
-- uradora, chankan (rob kan), multi-ron (double/triple ron)
 - Persist penuh state ronde ke Postgres (replay/resume)
 - Auth pemain (verifikasi tanda tangan wallet) di gateway
-- Endpoint settle: relay ranking + signature ke kontrak
+- Endpoint settle: relay ranking + signature ke kontrak (loop duit penuh)
+- Frontend MiniPay

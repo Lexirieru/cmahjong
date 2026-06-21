@@ -77,24 +77,25 @@ export class Hanchan {
       return;
     }
 
-    // tsumo / ron
-    const winner = out.winner!;
+    // tsumo / ron (ron bisa ganda)
+    const head = out.winner!; // pemenang utama (head-bump): terima honba + sticks
+    const winners = out.winners ?? [head];
     if (out.type === "ron") {
       const bonus = 300 * this.honba;
       this.points[out.loser!] -= bonus;
-      this.points[winner] += bonus;
+      this.points[head] += bonus;
     } else {
       for (let s = 0; s < SEATS; s++) {
-        if (s === winner) continue;
+        if (s === head) continue;
         this.points[s] -= 100 * this.honba;
-        this.points[winner] += 100 * this.honba;
+        this.points[head] += 100 * this.honba;
       }
     }
-    this.points[winner] += pot * 1000; // kumpulkan semua riichi sticks
+    this.points[head] += pot * 1000; // kumpulkan semua riichi sticks
     this.riichiSticks = 0;
 
-    if (winner === this.dealer) {
-      this.honba++; // renchan: dealer tetap
+    if (winners.includes(this.dealer)) {
+      this.honba++; // renchan: dealer termasuk pemenang
     } else {
       this.honba = 0;
       this.rotateDealer();

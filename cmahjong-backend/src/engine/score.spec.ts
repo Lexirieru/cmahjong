@@ -77,6 +77,48 @@ describe("scoreHand - kasus umum", () => {
   });
 });
 
+describe("scoreHand - uradora", () => {
+  // 234m 234s 678s 345p 77m (menang 5p) — pinfu/tanyao
+  const HAND = [1, 2, 3, 19, 20, 21, 23, 24, 25, 11, 12, 13, 6, 6];
+
+  it("uradora menambah han hanya saat riichi", () => {
+    const counts = countsFromKinds(HAND);
+    const base = scoreHand({ counts, ctx: ctx({ winningTile: 13, riichi: true }), isDealer: false });
+    // ura indikator 6m(kind5) -> dora 7m(kind6); tangan punya 7m x2 => +2
+    const withUra = scoreHand({
+      counts,
+      ctx: ctx({ winningTile: 13, riichi: true }),
+      isDealer: false,
+      uraIndicators: [5],
+    });
+    expect(withUra.han).toBe(base.han + 2);
+  });
+
+  it("uradora diabaikan tanpa riichi", () => {
+    const counts = countsFromKinds(HAND);
+    const noUra = scoreHand({ counts, ctx: ctx({ winningTile: 13 }), isDealer: false });
+    const withUra = scoreHand({
+      counts,
+      ctx: ctx({ winningTile: 13 }),
+      isDealer: false,
+      uraIndicators: [5],
+    });
+    expect(withUra.han).toBe(noUra.han);
+  });
+});
+
+describe("scoreHand - chankan (sebagai yaku)", () => {
+  it("ctx.chankan menambah yaku Chankan", () => {
+    const counts = countsFromKinds([1, 2, 3, 19, 20, 21, 23, 24, 25, 11, 12, 13, 6, 6]);
+    const r = scoreHand({
+      counts,
+      ctx: ctx({ winningTile: 13, isTsumo: false, isMenzen: true, chankan: true }),
+      isDealer: false,
+    });
+    expect(r.yaku.some((y) => y.name === "Chankan")).toBe(true);
+  });
+});
+
 describe("scoreHand - yakuman", () => {
   it("Kokushi musou = yakuman", () => {
     const counts = countsFromKinds([0, 0, 8, 9, 17, 18, 26, 27, 28, 29, 30, 31, 32, 33]);

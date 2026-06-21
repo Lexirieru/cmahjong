@@ -131,6 +131,11 @@ export class GameService {
     return this.round(chainGameId).ankan(seat, kind);
   }
 
+  /** Shouminkan (tambah pon -> kan); bisa memicu fase chankan. */
+  addedKan(chainGameId: string, seat: number, kind: number): RoundOutcome | null {
+    return this.round(chainGameId).addedKan(seat, kind);
+  }
+
   /**
    * Hitung ranking final (alamat juara 1..4) dan tandatangani sebagai server
    * untuk settleByServer di kontrak. Memakai poin akhir hanchan.

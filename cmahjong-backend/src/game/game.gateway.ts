@@ -115,6 +115,16 @@ export class GameGateway implements OnGatewayConnection {
     return { ok: true };
   }
 
+  @SubscribeMessage("addedkan")
+  async onAddedKan(@MessageBody() body: { gameId: string; address: string; kind: number }) {
+    const seat = this.games.seatOf(body.gameId, body.address);
+    // bisa membuka fase chankan (robbers merespons via "call"), atau langsung selesai
+    const outcome = this.games.addedKan(body.gameId, seat, body.kind);
+    this.broadcastState(body.gameId);
+    if (outcome) await this.emitOutcome(body.gameId, outcome);
+    return { ok: true };
+  }
+
   @SubscribeMessage("tsumo")
   async onTsumo(@MessageBody() body: { gameId: string; address: string }) {
     const seat = this.games.seatOf(body.gameId, body.address);

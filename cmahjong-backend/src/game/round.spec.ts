@@ -268,6 +268,60 @@ describe("Round - furiten", () => {
   });
 });
 
+describe("Round - chankan (rob the kan)", () => {
+  it("shouminkan dirampok oleh penunggu (ron + yaku Chankan)", () => {
+    const r = injected({
+      // seat0 punya pon 5p + 1 ubin 5p untuk shouminkan
+      hands: [[13, 27, 28, 29, 30, 31, 32, 0, 9, 18], JUNK, RON_5P, JUNK],
+    });
+    r.melds[0].push({ type: "triplet", kind: 13, open: true });
+
+    const out = r.addedKan(0, 13); // tawarkan chankan
+    expect(out).toBeNull();
+    expect(r.availableCalls().some((c) => c.seat === 2 && c.type === "ron")).toBe(true);
+
+    const res = r.respond(2, { type: "ron" });
+    expect(res.resolved).toBe(true);
+    expect(res.outcome!.winner).toBe(2);
+    expect(res.outcome!.loser).toBe(0);
+    expect(res.outcome!.score!.yaku.some((y) => y.name === "Chankan")).toBe(true);
+  });
+
+  it("bila tak dirampok, kan selesai terbentuk", () => {
+    const r = injected({
+      hands: [[13, 27, 28, 29, 30, 31, 32, 0, 9, 18], JUNK, JUNK, JUNK], // seat2 tak tenpai
+    });
+    r.melds[0].push({ type: "triplet", kind: 13, open: true });
+    const out = r.addedKan(0, 13);
+    // tak ada robber -> kan langsung terbentuk
+    expect(out).toBeNull();
+    expect(r.publicState().melds[0][0]).toEqual({ type: "kan", kind: 13, open: true });
+    expect(r.turn).toBe(0);
+  });
+});
+
+describe("Round - multi-ron (double ron)", () => {
+  it("dua pemain ron buangan yang sama, keduanya dibayar", () => {
+    const r = injected({
+      hands: [
+        [27, 27, 28, 28, 29, 29, 30, 30, 31, 31, 32, 32, 33, 13], // seat0 buang 5p
+        RON_5P, // seat1 tenpai 5p
+        RON_5P, // seat2 tenpai 5p
+        JUNK,
+      ],
+    });
+    r.discard(0, -1);
+    expect(r.respond(1, { type: "ron" }).resolved).toBe(false); // tunggu seat2
+    const res = r.respond(2, { type: "ron" });
+    expect(res.resolved).toBe(true);
+    const out = res.outcome!;
+    expect(out.winners).toEqual([1, 2]); // head-bump: seat1 lebih dekat
+    expect(out.points[1]).toBeGreaterThan(START_POINTS);
+    expect(out.points[2]).toBeGreaterThan(START_POINTS);
+    expect(out.points[0]).toBeLessThan(START_POINTS); // pembuang bayar keduanya
+  });
+});
+
 describe("Round - ippatsu & double riichi", () => {
   it("riichi pada buangan pertama + ron seputaran = Double Riichi + Ippatsu", () => {
     const r = injected({
