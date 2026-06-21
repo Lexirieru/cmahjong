@@ -26,6 +26,7 @@ model GameTable {
   buyIn         String // satuan terkecil token (string untuk presisi)
   server        String // alamat server/operator
   status        TableStatus @default(OPEN)
+  length        String      @default("hanchan") // "east" | "hanchan"
   seed          String? // seed kolektif setelah reveal lengkap
   liveState     Json? // snapshot Hanchan/Round live (untuk resume setelah restart)
   finalRanking  String[] // alamat juara 1..4 saat settle

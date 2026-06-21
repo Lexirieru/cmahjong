@@ -40,6 +40,7 @@ export class HistoryService {
     return {
       gameId: game.chainGameId,
       status: game.status,
+      length: game.length,
       seed: game.seed,
       players: game.seats.map((s) => s.address),
       finalRanking: game.finalRanking,

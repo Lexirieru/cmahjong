@@ -16,6 +16,7 @@ interface Room {
   players: string[]; // alamat per seat 0..3
   seed: string;
   hanchan: Hanchan;
+  length: HanchanLength;
   dbId?: string; // GameTable.id untuk relasi Move
   moveSeq: number; // nomor urut aksi berikutnya (untuk replay)
 }
@@ -70,6 +71,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
           players,
           seed: r.seed ?? "",
           hanchan,
+          length: (r.length as HanchanLength) ?? "hanchan",
           dbId: r.id,
           moveSeq,
         });
@@ -185,6 +187,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
           buyIn,
           server,
           status: "PLAYING",
+          length: room.length,
           seed: room.seed,
           seats: {
             create: room.players.map((address, seatIndex) => ({ seatIndex, address })),
@@ -242,6 +245,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
       players,
       seed,
       hanchan: new Hanchan(seed, opts?.length ?? "hanchan"),
+      length: opts?.length ?? "hanchan",
       moveSeq: 0,
     };
     this.rooms.set(chainGameId, room);
