@@ -8,7 +8,29 @@ const MAHJONG_ABI = [
   "function getSeed(uint256) view returns (bytes32)",
   "function getPlayers(uint256) view returns (address[4])",
   "function gameCount() view returns (uint256)",
+  "function settle(uint256 gameId, address[4] ranking, bytes[4] signatures)",
+  "function settleByServer(uint256 gameId, address[4] ranking, bytes serverSig)",
 ];
+
+/** Status game on-chain (selaras enum Status di kontrak). */
+export enum ChainStatus {
+  None,
+  Open,
+  Revealing,
+  Playing,
+  Settled,
+  Cancelled,
+}
+
+export interface ChainGame {
+  token: string;
+  buyIn: bigint;
+  server: string;
+  status: ChainStatus;
+  seed: string;
+  players: string[];
+  settleDeadline: number;
+}
 
 /**
  * Jembatan ke kontrak MahjongTable di Celo: baca state game & tandatangani
@@ -42,6 +64,36 @@ export class ChainService {
   /** Alamat server yang dipakai untuk attest (harus = game.server on-chain). */
   get serverAddress(): string | undefined {
     return this.serverWallet?.address;
+  }
+
+  /** Alamat kontrak MahjongTable. */
+  get address(): string {
+    return this.contractAddress;
+  }
+
+  /** Chain id (Celo mainnet 42220). */
+  get chain(): number {
+    return this.chainId;
+  }
+
+  /** Apakah pembacaan on-chain aktif (alamat kontrak terkonfigurasi). */
+  get configured(): boolean {
+    return !!this.contract;
+  }
+
+  /** Baca ringkasan state game on-chain. */
+  async readGame(chainGameId: bigint): Promise<ChainGame> {
+    if (!this.contract) throw new Error("kontrak belum dikonfigurasi");
+    const g = await this.contract.getGame(chainGameId);
+    return {
+      token: g.token,
+      buyIn: g.buyIn,
+      server: g.server,
+      status: Number(g.status) as ChainStatus,
+      seed: g.seed,
+      players: [...g.players],
+      settleDeadline: Number(g.settleDeadline),
+    };
   }
 
   /** Baca seed kolektif on-chain (sumber kebenaran untuk shuffle). */
