@@ -7,7 +7,7 @@
  *   struct  = GameResult(uint256 gameId, bytes32 rankingHash)
  *   rankingHash = keccak256(abi.encodePacked(address[4] ranking))
  */
-import { solidityPackedKeccak256, Wallet, TypedDataDomain } from "ethers";
+import { solidityPackedKeccak256, verifyTypedData, Wallet, TypedDataDomain } from "ethers";
 
 export const RESULT_TYPES = {
   GameResult: [
@@ -40,4 +40,39 @@ export async function signResult(
     gameId,
     rankingHash: rankingHash(ranking),
   });
+}
+
+/**
+ * Pulihkan alamat penanda tangan dari sebuah signature hasil game (EIP-712).
+ * Dipakai backend untuk memverifikasi tanda tangan pemain sebelum submit `settle`.
+ */
+export function recoverResultSigner(
+  contract: string,
+  chainId: number,
+  gameId: bigint | number,
+  ranking: [string, string, string, string],
+  signature: string,
+): string {
+  return verifyTypedData(
+    domain(contract, chainId),
+    RESULT_TYPES as never,
+    { gameId, rankingHash: rankingHash(ranking) },
+    signature,
+  );
+}
+
+/** Apakah `signature` benar-benar dari `expected` atas hasil game ini? */
+export function verifyResult(
+  contract: string,
+  chainId: number,
+  gameId: bigint | number,
+  ranking: [string, string, string, string],
+  signature: string,
+  expected: string,
+): boolean {
+  try {
+    return recoverResultSigner(contract, chainId, gameId, ranking, signature).toLowerCase() === expected.toLowerCase();
+  } catch {
+    return false;
+  }
 }
