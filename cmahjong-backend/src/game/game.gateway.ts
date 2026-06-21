@@ -15,18 +15,11 @@ import { RoundOutcome } from "./round";
 /**
  * Gateway realtime (Socket.IO) untuk meja cMahjong.
  *
- * Event masuk:
- *   join        { gameId, address }           -> gabung room, terima tangan privat
- *   start       { gameId, seed?, players? }    -> mulai ronde (seed dari chain bila kosong)
- *   discard     { gameId, address, tileId }
- *   riichi      { gameId, address, tileId }
- *   tsumo       { gameId, address }
- *   ron         { gameId, address }
+ * Masuk:  join · start · discard · riichi · call · ankan · addedkan · tsumo · submitSignature
+ * Keluar: state (publik, broadcast) · hand (privat per pemain) · roundEnd · newRound · settleReady
  *
- * Event keluar (broadcast ke room `gameId`):
- *   state       PublicState
- *   hand        Tile[]   (privat, hanya ke pengirim)
- *   outcome     RoundOutcome + settle payload
+ * Setiap perubahan state memanggil `sync`: broadcast state publik + kirim ke tiap
+ * socket HANYA tangannya sendiri (hidden hands terjaga, tangan selalu terkini).
  */
 @WebSocketGateway({ cors: { origin: "*" } })
 export class GameGateway implements OnGatewayConnection {
@@ -44,24 +37,36 @@ export class GameGateway implements OnGatewayConnection {
     this.logger.debug(`klien terhubung: ${client.id}`);
   }
 
-  private broadcastState(gameId: string) {
-    this.server.to(gameId).emit("state", this.games.publicState(gameId));
-  }
+  /** Kirim tiap socket tangannya sendiri DULU, lalu broadcast state publik
+   *  (urutan ini memastikan klien sudah pegang tangan terkini saat memproses state). */
+  private async sync(gameId: string) {
+    let state;
+    try {
+      state = this.games.publicState(gameId);
+    } catch {
+      return; // ronde belum mulai
+    }
 
-  private sendHand(client: Socket, gameId: string, address: string) {
-    const seat = this.games.seatOf(gameId, address);
-    client.emit("hand", { seat, tiles: this.games.handOf(gameId, seat) });
+    const sockets = await this.server.in(gameId).fetchSockets();
+    for (const s of sockets) {
+      const address = (s.data as { address?: string })?.address;
+      if (!address) continue;
+      try {
+        const seat = this.games.seatOf(gameId, address);
+        s.emit("hand", { seat, tiles: this.games.handOf(gameId, seat) });
+      } catch {
+        /* socket ini bukan pemain */
+      }
+    }
+
+    this.server.to(gameId).emit("state", state);
   }
 
   @SubscribeMessage("join")
-  onJoin(@ConnectedSocket() client: Socket, @MessageBody() body: { gameId: string; address: string }) {
-    client.join(body.gameId);
-    try {
-      this.sendHand(client, body.gameId, body.address);
-      client.emit("state", this.games.publicState(body.gameId));
-    } catch {
-      // ronde belum mulai — abaikan
-    }
+  async onJoin(@ConnectedSocket() client: Socket, @MessageBody() body: { gameId: string; address: string }) {
+    client.data = { gameId: body.gameId, address: body.address };
+    await client.join(body.gameId);
+    await this.sync(body.gameId);
     return { ok: true };
   }
 
@@ -75,26 +80,24 @@ export class GameGateway implements OnGatewayConnection {
       players: body.players,
       length: body.length,
     });
-    this.broadcastState(body.gameId);
+    await this.sync(body.gameId);
     return { ok: true };
   }
 
   @SubscribeMessage("discard")
-  async onDiscard(
-    @MessageBody() body: { gameId: string; address: string; tileId: number },
-  ) {
+  async onDiscard(@MessageBody() body: { gameId: string; address: string; tileId: number }) {
     const seat = this.games.seatOf(body.gameId, body.address);
     const outcome = this.games.discard(body.gameId, seat, body.tileId);
-    this.broadcastState(body.gameId);
+    await this.sync(body.gameId);
     if (outcome) await this.emitOutcome(body.gameId, outcome);
     return { ok: true };
   }
 
   @SubscribeMessage("riichi")
-  onRiichi(@MessageBody() body: { gameId: string; address: string; tileId: number }) {
+  async onRiichi(@MessageBody() body: { gameId: string; address: string; tileId: number }) {
     const seat = this.games.seatOf(body.gameId, body.address);
     this.games.riichi(body.gameId, seat, body.tileId);
-    this.broadcastState(body.gameId);
+    await this.sync(body.gameId);
     return { ok: true };
   }
 
@@ -105,7 +108,7 @@ export class GameGateway implements OnGatewayConnection {
   ) {
     const seat = this.games.seatOf(body.gameId, body.address);
     const res = this.games.respond(body.gameId, seat, { type: body.action, low: body.low });
-    this.broadcastState(body.gameId);
+    await this.sync(body.gameId);
     if (res.resolved && res.outcome) await this.emitOutcome(body.gameId, res.outcome);
     return { ok: true, resolved: res.resolved, action: res.action };
   }
@@ -114,7 +117,7 @@ export class GameGateway implements OnGatewayConnection {
   async onAnkan(@MessageBody() body: { gameId: string; address: string; kind: number }) {
     const seat = this.games.seatOf(body.gameId, body.address);
     const outcome = this.games.ankan(body.gameId, seat, body.kind);
-    this.broadcastState(body.gameId);
+    await this.sync(body.gameId);
     if (outcome) await this.emitOutcome(body.gameId, outcome);
     return { ok: true };
   }
@@ -122,9 +125,8 @@ export class GameGateway implements OnGatewayConnection {
   @SubscribeMessage("addedkan")
   async onAddedKan(@MessageBody() body: { gameId: string; address: string; kind: number }) {
     const seat = this.games.seatOf(body.gameId, body.address);
-    // bisa membuka fase chankan (robbers merespons via "call"), atau langsung selesai
     const outcome = this.games.addedKan(body.gameId, seat, body.kind);
-    this.broadcastState(body.gameId);
+    await this.sync(body.gameId);
     if (outcome) await this.emitOutcome(body.gameId, outcome);
     return { ok: true };
   }
@@ -146,15 +148,13 @@ export class GameGateway implements OnGatewayConnection {
   }
 
   private async emitOutcome(gameId: string, outcome: RoundOutcome) {
-    // catat ke hanchan: lanjut ronde berikut, atau selesai + settle payload
     const end = await this.games.recordOutcome(gameId, outcome);
     this.server.to(gameId).emit("roundEnd", end);
     if (end.finished) {
-      // game selesai — minta para pemain menandatangani ranking final
       this.server.to(gameId).emit("settleReady", end.settle);
     } else {
-      // ronde baru dimulai — klien me-refresh tangan via "join"
-      this.broadcastState(gameId);
+      // ronde baru sudah dimulai — dorong state + tangan baru otomatis
+      await this.sync(gameId);
       this.server.to(gameId).emit("newRound", this.games.hanchanState(gameId));
     }
   }
