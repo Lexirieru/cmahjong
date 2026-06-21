@@ -4,7 +4,8 @@
  * jalannya game persis (karena tembok deterministik dari seed yang sama).
  */
 import { Hanchan, HanchanLength } from "./hanchan";
-import { RoundOutcome } from "./round";
+import { PublicState, RoundOutcome } from "./round";
+import { Tile } from "../engine/tiles";
 
 export interface ReplayMove {
   seq: number;
@@ -64,5 +65,42 @@ export function replayGame(tape: ReplayTape): ReplayResult {
     finished: hanchan.finished,
     points: hanchan.points,
     ranking: hanchan.finalRanking(),
+  };
+}
+
+export interface ReplayFrame {
+  seq: number;
+  seat: number; // seat pelaku aksi (-1 untuk frame awal)
+  kind: string; // "deal" untuk frame awal
+  state: PublicState;
+  hands: Tile[][]; // tangan keempat seat (replay = terbuka)
+}
+
+/** Replay yang menangkap board state + tangan di tiap langkah (untuk UI). */
+export function replayStates(tape: ReplayTape): { frames: ReplayFrame[]; result: ReplayResult } {
+  const hanchan = new Hanchan(tape.seed, tape.length);
+  const frames: ReplayFrame[] = [];
+  const capture = (seq: number, seat: number, kind: string) => {
+    const r = hanchan.round;
+    frames.push({
+      seq,
+      seat,
+      kind,
+      state: r.publicState(),
+      hands: [0, 1, 2, 3].map((s) => r.handOf(s)),
+    });
+  };
+
+  capture(-1, -1, "deal");
+  for (const m of [...tape.moves].sort((a, b) => a.seq - b.seq)) {
+    if (hanchan.finished) break;
+    const outcome = applyMove(hanchan, m);
+    if (outcome) hanchan.recordOutcome(outcome);
+    if (!hanchan.finished) capture(m.seq, m.seat, m.kind);
+  }
+
+  return {
+    frames,
+    result: { finished: hanchan.finished, points: hanchan.points, ranking: hanchan.finalRanking() },
   };
 }

@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { HanchanLength } from "../game/hanchan";
+import { ReplayMove, replayStates } from "../game/replay";
 
 /** Riwayat & data replay game dari Postgres. */
 @Injectable()
@@ -51,5 +53,18 @@ export class HistoryService {
         payload: m.payload,
       })),
     };
+  }
+
+  /** Board state + tangan di tiap langkah (untuk UI replay). */
+  async getReplayStates(chainGameId: string) {
+    const tape = await this.getReplay(chainGameId);
+    if (!tape.seed) throw new NotFoundException("game belum punya seed (belum dimulai)");
+    const moves = tape.moves as unknown as ReplayMove[];
+    const { frames, result } = replayStates({
+      seed: tape.seed,
+      length: tape.length as HanchanLength,
+      moves,
+    });
+    return { gameId: tape.gameId, players: tape.players, finalRanking: tape.finalRanking, frames, result };
   }
 }

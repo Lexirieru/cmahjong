@@ -18,4 +18,10 @@ export class HistoryController {
   replay(@Param("gameId") gameId: string) {
     return this.history.getReplay(gameId);
   }
+
+  /** Board state per langkah untuk UI replay. */
+  @Get(":gameId/replay/states")
+  replayStates(@Param("gameId") gameId: string) {
+    return this.history.getReplayStates(gameId);
+  }
 }
