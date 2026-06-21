@@ -2,12 +2,14 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {MahjongTable} from "../src/MahjongTable.sol";
 
-/// @notice Deploy MahjongTable ke Celo mainnet dengan allowlist cUSD / USDC / USDT / CELO native.
+/// @notice Deploy MahjongTable (UUPS) ke Celo mainnet: implementation + ERC1967Proxy,
+///         allowlist cUSD / USDC / USDT / CELO native via initialize().
 ///
 /// Env yang dibaca:
-///   PRIVATE_KEY — deployer (sekaligus owner/house default).
+///   PRIVATE_KEY — deployer (sekaligus owner/house & otoritas upgrade default).
 ///   RAKE_BPS    — house cut dalam bps (opsional, default 300 = 3%).
 ///
 /// Jalankan (mainnet):
@@ -19,7 +21,7 @@ contract DeployMahjongTable is Script {
     address constant USDT = 0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e; // 6 desimal
     address constant NATIVE_CELO = address(0); // sentinel CELO native
 
-    function run() external returns (MahjongTable mahjong) {
+    function run() external returns (address proxy, address implementation) {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address owner = vm.addr(pk);
         uint16 rakeBps = uint16(vm.envOr("RAKE_BPS", uint256(300)));
@@ -30,11 +32,18 @@ contract DeployMahjongTable is Script {
         tokens[2] = USDT;
         tokens[3] = NATIVE_CELO;
 
+        bytes memory initData = abi.encodeCall(MahjongTable.initialize, (owner, rakeBps, tokens));
+
         vm.startBroadcast(pk);
-        mahjong = new MahjongTable(owner, rakeBps, tokens);
+        MahjongTable impl = new MahjongTable();
+        ERC1967Proxy proxyContract = new ERC1967Proxy(address(impl), initData);
         vm.stopBroadcast();
 
-        console.log("MahjongTable:", address(mahjong));
+        proxy = address(proxyContract);
+        implementation = address(impl);
+
+        console.log("MahjongTable proxy:         ", proxy);
+        console.log("MahjongTable implementation:", implementation);
         console.log("owner:", owner);
         console.log("rakeBps:", rakeBps);
         console.log("allowlist: cUSD, USDC, USDT, CELO(native)");

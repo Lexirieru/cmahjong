@@ -3,10 +3,11 @@ pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {EIP712Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
 
 /// @title MahjongTable — escrow & settlement multi-token untuk cMahjong (4 pemain) di Celo.
 /// @notice Blockchain di sini hanya berperan sebagai *kasir + notaris*:
@@ -21,6 +22,9 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 /// (satu pemain tak bisa nge-brick settlement) & reentrancy, serta seragam untuk
 /// native maupun ERC20.
 ///
+/// Kontrak ini UPGRADEABLE (UUPS): dipasang di belakang ERC1967Proxy, hanya owner
+/// yang boleh meng-upgrade implementasi (`_authorizeUpgrade`).
+///
 /// Alur 1 game:
 ///   1. createGame  — organizer pilih token (harus di-allowlist), buy-in, server, bobot payout, deadline.
 ///   2. joinGame    — 4 pemain setor buy-in (ERC20: approve dulu; native: kirim msg.value) + commitment.
@@ -29,8 +33,25 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 ///   5. settle      — keempat pemain menandatangani ranking (EIP-712) → hadiah dikreditkan.
 ///      settleByServer — fallback setelah deadline: server meng-attest ranking (anti rage-quit).
 ///   6. withdraw    — pemenang/penerima refund menarik saldonya kapan saja.
-contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
+contract MahjongTable is Initializable, EIP712Upgradeable, OwnableUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
+
+    /// @dev Reentrancy guard berbasis transient storage (EVM Cancun). Tidak memakai
+    ///      slot storage permanen sehingga otomatis aman terhadap upgrade.
+    ///      Slot = keccak256("cmahjong.reentrancyGuard.transient").
+    modifier nonReentrant() {
+        assembly {
+            if tload(0x643119965bca0d2c9b966ba98ba1c1e0328dc1a5f0f036b5266e1fcd4e795809) {
+                mstore(0x00, 0x3ee5aeb5) // ReentrancyGuardReentrantCall()
+                revert(0x1c, 0x04)
+            }
+            tstore(0x643119965bca0d2c9b966ba98ba1c1e0328dc1a5f0f036b5266e1fcd4e795809, 1)
+        }
+        _;
+        assembly {
+            tstore(0x643119965bca0d2c9b966ba98ba1c1e0328dc1a5f0f036b5266e1fcd4e795809, 0)
+        }
+    }
 
     /// @dev Sentinel untuk CELO native di seluruh kontrak (token == address(0)).
     address public constant NATIVE = address(0);
@@ -40,29 +61,29 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
     uint16 public constant MAX_RAKE_BPS = 1_000; // cap house cut di 10%
 
     enum Status {
-        None,       // belum dibuat
-        Open,       // menunggu 4 pemain join + commit
-        Revealing,  // sudah penuh, menunggu semua reveal secret
-        Playing,    // seed siap, game berjalan offchain
-        Settled,    // hadiah sudah dikreditkan
-        Cancelled   // dibatalkan (timeout) + stake dikembalikan
+        None, // belum dibuat
+        Open, // menunggu 4 pemain join + commit
+        Revealing, // sudah penuh, menunggu semua reveal secret
+        Playing, // seed siap, game berjalan offchain
+        Settled, // hadiah sudah dikreditkan
+        Cancelled // dibatalkan (timeout) + stake dikembalikan
     }
 
     struct Game {
-        address token;            // mata uang buy-in (address(0) = CELO native)
-        uint256 buyIn;            // buy-in per pemain (satuan terkecil token)
-        address server;           // operator game engine offchain (untuk fallback settle)
+        address token; // mata uang buy-in (address(0) = CELO native)
+        uint256 buyIn; // buy-in per pemain (satuan terkecil token)
+        address server; // operator game engine offchain (untuk fallback settle)
         Status status;
-        uint8 joined;             // jumlah pemain yang sudah join
-        uint8 revealedCount;      // jumlah pemain yang sudah reveal
-        uint64 commitDeadline;    // batas waktu game terisi penuh
-        uint64 revealWindow;      // durasi reveal setelah penuh
-        uint64 settleWindow;      // durasi settle setelah seed siap
-        uint64 revealDeadline;    // di-set saat penuh
-        uint64 settleDeadline;    // di-set saat seed siap
-        bytes32 seed;             // seed kolektif hasil reveal
-        uint16[SEATS] payoutBps;  // bobot payout untuk rank 1..4 (sum = 10000)
-        address[SEATS] players;   // pemain berdasarkan urutan join
+        uint8 joined; // jumlah pemain yang sudah join
+        uint8 revealedCount; // jumlah pemain yang sudah reveal
+        uint64 commitDeadline; // batas waktu game terisi penuh
+        uint64 revealWindow; // durasi reveal setelah penuh
+        uint64 settleWindow; // durasi settle setelah seed siap
+        uint64 revealDeadline; // di-set saat penuh
+        uint64 settleDeadline; // di-set saat seed siap
+        bytes32 seed; // seed kolektif hasil reveal
+        uint16[SEATS] payoutBps; // bobot payout untuk rank 1..4 (sum = 10000)
+        address[SEATS] players; // pemain berdasarkan urutan join
         bytes32[SEATS] commitments;
         bytes32[SEATS] secrets;
         bool[SEATS] revealed;
@@ -70,8 +91,7 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
 
     /// @dev Struct EIP-712 yang ditandatangani: hasil akhir sebuah game.
     ///      rankingHash = keccak256(abi.encodePacked(ranking)) dengan ranking[0]=juara 1.
-    bytes32 private constant RESULT_TYPEHASH =
-        keccak256("GameResult(uint256 gameId,bytes32 rankingHash)");
+    bytes32 private constant RESULT_TYPEHASH = keccak256("GameResult(uint256 gameId,bytes32 rankingHash)");
 
     uint16 public rakeBps; // house cut saat ini (bps)
 
@@ -83,6 +103,9 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
 
     uint256 public gameCount;
     mapping(uint256 => Game) private games;
+
+    /// @dev Ruang cadangan untuk variabel masa depan agar upgrade aman terhadap layout storage.
+    uint256[50] private __gap;
 
     event RakeUpdated(uint16 rakeBps);
     event TokenAllowed(address indexed token, bool allowed);
@@ -115,14 +138,20 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
     error RakeTooHigh();
     error NothingToWithdraw();
     error NativeTransferFailed();
+    error ReentrancyGuardReentrantCall();
 
-    /// @param initialOwner  Owner/house (penerima rake, pengelola allowlist).
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    /// @param initialOwner  Owner/house (penerima rake, pengelola allowlist, otorisasi upgrade).
     /// @param _rakeBps      House cut awal (bps, maks 1000 = 10%).
     /// @param initialTokens Daftar token yang langsung di-allowlist (sertakan address(0) untuk CELO native).
-    constructor(address initialOwner, uint16 _rakeBps, address[] memory initialTokens)
-        EIP712("cMahjong", "1")
-        Ownable(initialOwner)
-    {
+    function initialize(address initialOwner, uint16 _rakeBps, address[] memory initialTokens) external initializer {
+        __EIP712_init("cMahjong", "1");
+        __Ownable_init(initialOwner);
+
         if (_rakeBps > MAX_RAKE_BPS) revert RakeTooHigh();
         rakeBps = _rakeBps;
         for (uint256 i; i < initialTokens.length; ++i) {
@@ -130,6 +159,9 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
             emit TokenAllowed(initialTokens[i], true);
         }
     }
+
+    /// @dev Hanya owner yang boleh meng-upgrade implementasi (syarat UUPS).
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     // ---------------------------------------------------------------------
     // Admin
@@ -173,7 +205,9 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
         if (commitWindow == 0 || revealWindow == 0 || settleWindow == 0) revert InvalidWindow();
 
         uint256 sum;
-        for (uint256 i; i < SEATS; ++i) sum += payoutBps[i];
+        for (uint256 i; i < SEATS; ++i) {
+            sum += payoutBps[i];
+        }
         if (sum != BPS_DENOMINATOR) revert InvalidPayoutWeights();
 
         gameId = ++gameCount;
@@ -234,8 +268,7 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
         emit SecretRevealed(gameId, msg.sender);
 
         if (g.revealedCount == SEATS) {
-            bytes32 seed =
-                keccak256(abi.encodePacked(g.secrets[0], g.secrets[1], g.secrets[2], g.secrets[3]));
+            bytes32 seed = keccak256(abi.encodePacked(g.secrets[0], g.secrets[1], g.secrets[2], g.secrets[3]));
             g.seed = seed;
             g.status = Status.Playing;
             g.settleDeadline = uint64(block.timestamp) + g.settleWindow;
@@ -250,9 +283,7 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
     /// @notice Settle kooperatif: keempat pemain menandatangani ranking yang sama.
     /// @param ranking    ranking[0] = juara 1 ... ranking[3] = juru kunci (permutasi para pemain).
     /// @param signatures 4 tanda tangan EIP-712 dari keempat pemain (urutan bebas).
-    function settle(uint256 gameId, address[SEATS] calldata ranking, bytes[SEATS] calldata signatures)
-        external
-    {
+    function settle(uint256 gameId, address[SEATS] calldata ranking, bytes[SEATS] calldata signatures) external {
         Game storage g = games[gameId];
         if (g.status != Status.Playing) revert WrongStatus();
         _requireValidRanking(g, ranking);
@@ -272,9 +303,7 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
     }
 
     /// @notice Fallback setelah settleDeadline: server meng-attest ranking (anti rage-quit).
-    function settleByServer(uint256 gameId, address[SEATS] calldata ranking, bytes calldata serverSig)
-        external
-    {
+    function settleByServer(uint256 gameId, address[SEATS] calldata ranking, bytes calldata serverSig) external {
         Game storage g = games[gameId];
         if (g.status != Status.Playing) revert WrongStatus();
         if (block.timestamp <= g.settleDeadline) revert DeadlineNotReached();
@@ -318,7 +347,9 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
         uint256 buyIn = g.buyIn;
 
         if (revealedCount == 0) {
-            for (uint256 i; i < SEATS; ++i) _credit(token, g.players[i], buyIn);
+            for (uint256 i; i < SEATS; ++i) {
+                _credit(token, g.players[i], buyIn);
+            }
         } else {
             uint256 forfeitPool = (SEATS - revealedCount) * buyIn;
             uint256 share = forfeitPool / revealedCount;
@@ -382,9 +413,7 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
     // Internal
     // ---------------------------------------------------------------------
 
-    function _settlePayout(uint256 gameId, Game storage g, address[SEATS] calldata ranking, bool byServer)
-        private
-    {
+    function _settlePayout(uint256 gameId, Game storage g, address[SEATS] calldata ranking, bool byServer) private {
         g.status = Status.Settled; // effects sebelum interactions (kredit)
 
         address token = g.token;
