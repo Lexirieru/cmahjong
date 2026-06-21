@@ -10,9 +10,10 @@ interface Props {
   connect: () => void;
   onCreate: () => void;
   onJoin: () => void;
+  onHistory: () => void;
 }
 
-export function Home({ address, inMiniPay, connecting, connect, onCreate, onJoin }: Props) {
+export function Home({ address, inMiniPay, connecting, connect, onCreate, onJoin, onHistory }: Props) {
   return (
     <div className="flex flex-1 flex-col px-5">
       <div className="flex flex-1 flex-col items-center justify-center text-center">
@@ -50,6 +51,9 @@ export function Home({ address, inMiniPay, connecting, connect, onCreate, onJoin
             </Button>
           </>
         )}
+        <button onClick={onHistory} className="w-full pt-1 text-center text-xs text-ivory/45">
+          History &amp; replays
+        </button>
         <p className="pt-1 text-center text-xs text-ivory/40">
           Provably fair shuffle · settled on Celo
         </p>

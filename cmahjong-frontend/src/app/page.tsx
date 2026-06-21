@@ -8,11 +8,13 @@ import { JoinTable } from "@/components/screens/JoinTable";
 import { Lobby } from "@/components/screens/Lobby";
 import { GameTable } from "@/components/screens/GameTable";
 import { Result } from "@/components/screens/Result";
+import { History } from "@/components/screens/History";
+import { Replay } from "@/components/screens/Replay";
 import { useWallet } from "@/hooks/useWallet";
 import { useBalances } from "@/hooks/useBalances";
 import type { Address } from "viem";
 
-type Screen = "home" | "create" | "join" | "lobby" | "game" | "result";
+type Screen = "home" | "create" | "join" | "lobby" | "game" | "result" | "history" | "replay";
 
 const PREVIEW_ADDR = "0x0000000000000000000000000000000000000000" as Address;
 
@@ -23,6 +25,7 @@ export default function Page() {
   const [gameId, setGameId] = useState<bigint | null>(null);
   const [seat, setSeat] = useState(0);
   const [preview, setPreview] = useState(false);
+  const [replayId, setReplayId] = useState<string | null>(null);
 
   // Pulihkan navigasi saat refresh + dukung pratinjau (?preview=table) — di-effect agar tak bentrok hydration
   useEffect(() => {
@@ -74,7 +77,22 @@ export default function Page() {
           connect={connect}
           onCreate={() => setScreen("create")}
           onJoin={() => setScreen("join")}
+          onHistory={() => setScreen("history")}
         />
+      )}
+
+      {screen === "history" && (
+        <History
+          onBack={home}
+          onReplay={(id) => {
+            setReplayId(id);
+            setScreen("replay");
+          }}
+        />
+      )}
+
+      {screen === "replay" && replayId && (
+        <Replay gameId={replayId} onBack={() => setScreen("history")} />
       )}
 
       {screen === "create" && address && (
