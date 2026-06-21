@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+  OnModuleDestroy,
+} from "@nestjs/common";
 import { ChainService } from "../chain/chain.service";
 import { SettlementService } from "../settlement/settlement.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -32,7 +38,7 @@ export interface RoundEnd {
  * Metadata bisa di-mirror ke Postgres (TODO: persist penuh).
  */
 @Injectable()
-export class GameService implements OnModuleInit {
+export class GameService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(GameService.name);
   private readonly rooms = new Map<string, Room>();
   private readonly snapTimers = new Map<string, NodeJS.Timeout>();
@@ -72,6 +78,13 @@ export class GameService implements OnModuleInit {
     } catch (e) {
       this.logger.warn(`Gagal memuat game aktif dari DB: ${(e as Error).message}`);
     }
+  }
+
+  /** Saat shutdown: flush semua buffer aksi agar tak ada yang hilang. */
+  async onModuleDestroy(): Promise<void> {
+    for (const t of this.moveFlushTimers.values()) clearTimeout(t);
+    this.moveFlushTimers.clear();
+    await Promise.all([...this.moveBuffers.keys()].map((id) => this.flushMoves(id)));
   }
 
   /** Jadwalkan simpan snapshot (coalesced: maks 1 tulis / 400ms per game). */
@@ -258,6 +271,7 @@ export class GameService implements OnModuleInit {
       // buka sesi settle: pemain dapat submit tanda tangan untuk `settle` kooperatif
       this.settlement.open(chainGameId, room.players, end.settle.ranking);
       void this.persistSettled(chainGameId, end.settle.ranking, room.hanchan.points);
+      void this.flushMoves(chainGameId); // tulis sisa aksi sebelum game ditutup
     } else {
       this.queueSnapshot(chainGameId); // ronde baru — simpan agar resume akurat
     }
