@@ -10,6 +10,8 @@ interface Room {
   players: string[]; // alamat per seat 0..3
   seed: string;
   hanchan: Hanchan;
+  dbId?: string; // GameTable.id untuk relasi Move
+  moveSeq: number; // nomor urut aksi berikutnya (untuk replay)
 }
 
 export interface SettlePayload {
@@ -54,8 +56,16 @@ export class GameService implements OnModuleInit {
         const players = [...r.seats]
           .sort((a, b) => a.seatIndex - b.seatIndex)
           .map((s) => s.address);
-        this.rooms.set(r.chainGameId, { chainGameId: r.chainGameId, players, seed: r.seed ?? "", hanchan });
-        this.logger.log(`Game ${r.chainGameId} dipulihkan dari DB (resume)`);
+        const moveSeq = await this.prisma.move.count({ where: { tableId: r.id } });
+        this.rooms.set(r.chainGameId, {
+          chainGameId: r.chainGameId,
+          players,
+          seed: r.seed ?? "",
+          hanchan,
+          dbId: r.id,
+          moveSeq,
+        });
+        this.logger.log(`Game ${r.chainGameId} dipulihkan dari DB (resume, ${moveSeq} moves)`);
       }
     } catch (e) {
       this.logger.warn(`Gagal memuat game aktif dari DB: ${(e as Error).message}`);
@@ -103,7 +113,7 @@ export class GameService implements OnModuleInit {
           /* game offchain/test */
         }
       }
-      await this.prisma.gameTable.upsert({
+      const row = await this.prisma.gameTable.upsert({
         where: { chainGameId: room.chainGameId },
         update: { status: "PLAYING", seed: room.seed },
         create: {
@@ -118,6 +128,7 @@ export class GameService implements OnModuleInit {
           },
         },
       });
+      room.dbId = row.id;
     } catch (e) {
       this.logger.warn(`persistStart gagal: ${(e as Error).message}`);
     }
@@ -168,6 +179,7 @@ export class GameService implements OnModuleInit {
       players,
       seed,
       hanchan: new Hanchan(seed, opts?.length ?? "hanchan"),
+      moveSeq: 0,
     };
     this.rooms.set(chainGameId, room);
     this.logger.log(`Game ${chainGameId} dimulai (${opts?.length ?? "hanchan"})`);
