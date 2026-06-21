@@ -16,6 +16,12 @@ export class SettlementController {
     return this.settlement.get(gameId);
   }
 
+  /** Payload EIP-712 yang harus ditandatangani pemain (untuk signTypedData di klien). */
+  @Get(":gameId/typed-data")
+  typedData(@Param("gameId") gameId: string) {
+    return this.settlement.typedData(gameId);
+  }
+
   @Post(":gameId/signature")
   async submitSignature(
     @Param("gameId") gameId: string,

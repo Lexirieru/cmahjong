@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ChainService } from "../chain/chain.service";
-import { recoverResultSigner } from "../chain/signer";
+import { recoverResultSigner, resultTypedData } from "../chain/signer";
 
 export type SettlementStatus = "collecting" | "settled" | "failed";
 
@@ -100,6 +100,12 @@ export class SettlementService {
 
   get(gameId: string): Settlement {
     return this.view(this.require(gameId));
+  }
+
+  /** Payload EIP-712 yang harus ditandatangani pemain untuk game ini. */
+  typedData(gameId: string) {
+    const s = this.require(gameId);
+    return resultTypedData(this.chain.address, this.chain.chain, BigInt(gameId), s.ranking);
   }
 
   private require(gameId: string) {

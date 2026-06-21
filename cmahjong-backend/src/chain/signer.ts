@@ -26,6 +26,24 @@ export function rankingHash(ranking: [string, string, string, string]): string {
 }
 
 /**
+ * Payload EIP-712 lengkap (domain + types + value) yang harus ditandatangani klien
+ * (mis. via `wallet.signTypedData` / wagmi `signTypedData`).
+ */
+export function resultTypedData(
+  contract: string,
+  chainId: number,
+  gameId: bigint | number,
+  ranking: [string, string, string, string],
+) {
+  return {
+    domain: domain(contract, chainId),
+    types: RESULT_TYPES,
+    primaryType: "GameResult" as const,
+    message: { gameId: gameId.toString(), rankingHash: rankingHash(ranking) },
+  };
+}
+
+/**
  * Tanda tangani hasil game sebagai server (untuk settleByServer).
  * @returns signature 65-byte (0x...)
  */
