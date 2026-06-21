@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Address } from "viem";
-import { isMiniPay, requestAccounts } from "@/lib/minipay";
+import { isMiniPay, requestAccounts, silentAccounts } from "@/lib/minipay";
 import { ensureCeloChain } from "@/lib/chain";
 
 /**
@@ -30,6 +30,8 @@ export function useWallet() {
     const mp = isMiniPay();
     setInMiniPay(mp);
     if (mp) void connect();
+    // di luar MiniPay: pulihkan koneksi tanpa prompt saat refresh
+    else void silentAccounts().then((a) => a && setAddress(a as Address));
 
     const eth = window.ethereum;
     if (!eth?.on) return;

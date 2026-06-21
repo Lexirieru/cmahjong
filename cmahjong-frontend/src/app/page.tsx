@@ -24,14 +24,38 @@ export default function Page() {
   const [seat, setSeat] = useState(0);
   const [preview, setPreview] = useState(false);
 
-  // Pratinjau board tanpa wallet/backend (demo & QA): ?preview=table — di-effect agar tak bentrok hydration
+  // Pulihkan navigasi saat refresh + dukung pratinjau (?preview=table) — di-effect agar tak bentrok hydration
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("preview") === "table") {
       setPreview(true);
       setGameId(0n);
       setScreen("game");
+      return;
+    }
+    try {
+      const raw = localStorage.getItem("cm:nav");
+      if (raw) {
+        const n = JSON.parse(raw) as { screen?: Screen; gameId?: string | null; seat?: number };
+        if (n.screen) setScreen(n.screen);
+        if (n.gameId) setGameId(BigInt(n.gameId));
+        if (typeof n.seat === "number") setSeat(n.seat);
+      }
+    } catch {
+      /* ignore */
     }
   }, []);
+
+  // Simpan posisi navigasi agar refresh tidak kembali ke awal
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "cm:nav",
+        JSON.stringify({ screen, gameId: gameId?.toString() ?? null, seat }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [screen, gameId, seat]);
 
   const acct = address ?? (preview ? PREVIEW_ADDR : null);
 
@@ -82,6 +106,10 @@ export default function Page() {
           onEnter={(_id, s) => {
             setSeat(s < 0 ? 0 : s);
             setScreen("game");
+          }}
+          onResult={(id) => {
+            setGameId(id);
+            setScreen("result");
           }}
         />
       )}

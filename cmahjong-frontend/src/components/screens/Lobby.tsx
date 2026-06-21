@@ -24,11 +24,13 @@ export function Lobby({
   address,
   onBack,
   onEnter,
+  onResult,
 }: {
   gameId: bigint;
   address: Address;
   onBack: () => void;
   onEnter: (gameId: bigint, seat: number) => void;
+  onResult: (gameId: bigint) => void;
 }) {
   const [game, setGame] = useState<GameView | null>(null);
   const [busy, setBusy] = useState(false);
@@ -182,7 +184,9 @@ export function Lobby({
       </div>
 
       <div className="pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-        {game?.status === "Playing" ? (
+        {game?.status === "Settled" || game?.status === "Cancelled" ? (
+          <Button onClick={() => onResult(gameId)}>View result</Button>
+        ) : game?.status === "Playing" ? (
           <Button onClick={() => onEnter(gameId, mySeat)}>Enter table</Button>
         ) : game?.status === "Revealing" && iAmIn && !iRevealed ? (
           <Button onClick={reveal} loading={busy}>
