@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# cMahjong — Frontend (MiniPay)
 
-## Getting Started
+Mobile-first Mini App for [MiniPay](https://www.opera.com/products/minipay): connect,
+stake a stablecoin, play 4-player mahjong, and withdraw winnings — all on Celo.
 
-First, run the development server:
+Built with **Next.js 16 + viem + Socket.IO**. No ethers.js, legacy transactions only
+(MiniPay constraints).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Screens
+
+```
+Home ──► Create table ──► Lobby ──► Table ──► Result
+     └──► Join a table ──┘         (live board)  (withdraw)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Home** — connect (auto in MiniPay), start or join a table.
+- **Create** — pick currency (cUSD / USDC / USDT / CELO), set the buy-in, create on-chain.
+- **Lobby** — join (approve + stake + commit), reveal, watch players fill up.
+- **Table** — the live board: opponents, dora, discard rivers, your hand, calls.
+- **Result** — your winnings, withdraw to wallet.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Stack notes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **viem** for reads + writes; provider injected by MiniPay (`window.ethereum`).
+- **Legacy gas** forced on every tx — MiniPay does not support EIP-1559.
+- Settlement is **server-attested** (`settleByServer`): MiniPay can't sign messages,
+  so players never sign — the backend settles, players just withdraw.
+- Tile artwork: vendored SVGs in `public/tiles` (FluffyStuff, CC0).
 
-## Learn More
+## Develop
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+bun install
+bun run dev          # http://localhost:3000
+# preview the board without wallet/backend:  /?preview=table
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Env (`.env.local`, see `.env.example`):
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+NEXT_PUBLIC_BACKEND_URL=http://localhost:3001     # game engine (Socket.IO)
+NEXT_PUBLIC_SERVER_ADDRESS=0x56A2950d…            # operator (= game server)
+```
 
-## Deploy on Vercel
+### Test in MiniPay
+MiniPay can't reach localhost — expose with `ngrok http 3000`, then open the HTTPS
+URL via MiniPay → compass → Test page. Enable Developer Mode + Celo Sepolia first.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Contract: `0xBEE2D162aD3f3de655A74Bf5E79F37bb96aE0EC4` (Celo mainnet).
