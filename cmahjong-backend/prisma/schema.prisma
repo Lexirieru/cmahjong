@@ -52,13 +52,17 @@ model Seat {
   @@unique([tableId, address])
 }
 
-/// Log tiap aksi (untuk audit & replay).
+/// Log tiap aksi (untuk audit & replay langkah-demi-langkah).
 model Move {
   id        String   @id @default(cuid())
   table     GameTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
   tableId   String
+  seq       Int // urutan dalam game (untuk replay deterministik)
   seatIndex Int
-  kind      String // draw | discard | riichi | tsumo | ron | pon | chi | kan
+  kind      String // discard | riichi | tsumo | pon | chi | kan | ron | pass
   payload   Json?
   createdAt DateTime @default(now())
+
+  @@unique([tableId, seq])
+  @@index([tableId, seq])
 }
