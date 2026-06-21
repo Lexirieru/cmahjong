@@ -16,6 +16,7 @@
     "test:watch": "jest --watch",
     "e2e:game": "ts-node scripts/play-game-e2e.ts",
     "e2e:resume": "ts-node scripts/resume-e2e.ts",
+    "e2e:replay": "ts-node scripts/replay-e2e.ts",
     "e2e:settle": "ts-node scripts/settle-e2e.ts",
     "lint": "eslint \"{src,test}/**/*.ts\" --fix"
   },

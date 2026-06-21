@@ -45,6 +45,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
   private readonly snapTimers = new Map<string, NodeJS.Timeout>();
   private readonly moveBuffers = new Map<string, { seq: number; seatIndex: number; kind: string; payload: object }[]>();
   private readonly moveFlushTimers = new Map<string, NodeJS.Timeout>();
+  private readonly flushChain = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly chain: ChainService,
@@ -138,8 +139,15 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
     this.moveFlushTimers.set(chainGameId, t);
   }
 
-  /** Tulis buffer aksi ke DB sebagai batch (createMany). */
-  async flushMoves(chainGameId: string): Promise<void> {
+  /** Tulis buffer aksi ke DB (batch). Di-serialize per game agar tak balapan. */
+  flushMoves(chainGameId: string): Promise<unknown> {
+    const prev = this.flushChain.get(chainGameId) ?? Promise.resolve();
+    const next = prev.catch(() => {}).then(() => this.doFlush(chainGameId));
+    this.flushChain.set(chainGameId, next);
+    return next;
+  }
+
+  private async doFlush(chainGameId: string): Promise<void> {
     const room = this.rooms.get(chainGameId);
     const buf = this.moveBuffers.get(chainGameId);
     if (!buf || buf.length === 0) return;
@@ -250,7 +258,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
     };
     this.rooms.set(chainGameId, room);
     this.logger.log(`Game ${chainGameId} dimulai (${opts?.length ?? "hanchan"})`);
-    void this.persistStart(room);
+    await this.persistStart(room); // tunggu agar dbId siap sebelum aksi di-log
     return room;
   }
 

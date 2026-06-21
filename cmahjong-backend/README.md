@@ -87,12 +87,13 @@ Sudah jalan & teruji (55 test):
 
 - **Settle on-chain**: kumpul tanda tangan pemain → `settle` kooperatif, atau
   `settleByServer` fallback; ekspos EIP-712 typed-data + REST/WS endpoint
-- **Persist Postgres**: lifecycle game + hasil akhir (GameTable/Seat) + **snapshot
-  state ronde LIVE** (kolom `liveState`) yang disimpan coalesced tiap aksi. Saat
-  boot, game `PLAYING` dipulihkan dari DB → **resume setelah restart** (teruji e2e).
+- **Persist Postgres**: lifecycle + hasil + **snapshot live** (resume setelah
+  restart) + **log Move per aksi** untuk replay. `replayGame(seed, moves)`
+  mereproduksi game persis (teruji e2e: 347 aksi → state akhir identik).
+  Endpoint: `GET /games`, `GET /games/:id/replay` (tape seed + aksi terurut).
 
 TODO lanjutan:
-- Log Move per aksi (replay langkah-demi-langkah)
 - Auth pemain di gateway (verifikasi tanda tangan wallet)
+- UI replay/history di frontend
 - Auth pemain (verifikasi tanda tangan wallet) di gateway
 - Frontend MiniPay
