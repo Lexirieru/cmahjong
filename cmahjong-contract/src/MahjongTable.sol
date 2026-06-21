@@ -8,24 +8,32 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
-/// @title MahjongTable — escrow & settlement untuk cMahjong (4 pemain) di Celo.
+/// @title MahjongTable — escrow & settlement multi-token untuk cMahjong (4 pemain) di Celo.
 /// @notice Blockchain di sini hanya berperan sebagai *kasir + notaris*:
-///         menahan buy-in stablecoin, meng-anchor fairness (commit–reveal seed),
-///         dan mencairkan hadiah berdasarkan ranking akhir yang ditandatangani.
-///         Logika permainan (tiles, giliran, validasi move) berjalan OFFCHAIN.
+///         menahan buy-in, meng-anchor fairness (commit–reveal seed), dan mencairkan
+///         hadiah berdasarkan ranking akhir yang ditandatangani. Logika permainan
+///         (tiles, giliran, validasi move) berjalan OFFCHAIN.
+///
+/// Mata uang buy-in dipilih per-game dari ALLOWLIST yang dikelola owner:
+/// cUSD / USDC / USDT (ERC20, decimals berbeda) atau CELO native (sentinel address(0)).
+///
+/// Pencairan memakai pola PULL-PAYMENT (kredit + `withdraw`) agar aman dari griefing
+/// (satu pemain tak bisa nge-brick settlement) & reentrancy, serta seragam untuk
+/// native maupun ERC20.
 ///
 /// Alur 1 game:
-///   1. createGame  — organizer menentukan buy-in, server (operator engine), bobot payout, & deadline.
-///   2. joinGame    — 4 pemain deposit buy-in + submit commitment = hash(gameId, player, secret).
-///   3. revealSeed  — setiap pemain buka secret-nya; seed kolektif = hash(semua secret).
+///   1. createGame  — organizer pilih token (harus di-allowlist), buy-in, server, bobot payout, deadline.
+///   2. joinGame    — 4 pemain setor buy-in (ERC20: approve dulu; native: kirim msg.value) + commitment.
+///   3. revealSeed  — tiap pemain buka secret; seed kolektif = hash(semua secret).
 ///   4. (offchain)  — game dimainkan, server menghitung ranking 1st..4th.
-///   5. settle      — semua pemain menandatangani ranking (EIP-712) → payout uma/oka dicairkan.
+///   5. settle      — keempat pemain menandatangani ranking (EIP-712) → hadiah dikreditkan.
 ///      settleByServer — fallback setelah deadline: server meng-attest ranking (anti rage-quit).
-///
-/// Trust model MVP: server tidak bisa me-rig urutan tiles (seed patungan),
-/// tapi pemain percaya server tidak membocorkan tangan lawan. Jujur & cukup untuk hackathon.
+///   6. withdraw    — pemenang/penerima refund menarik saldonya kapan saja.
 contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
+
+    /// @dev Sentinel untuk CELO native di seluruh kontrak (token == address(0)).
+    address public constant NATIVE = address(0);
 
     uint8 public constant SEATS = 4;
     uint16 public constant BPS_DENOMINATOR = 10_000;
@@ -36,12 +44,13 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
         Open,       // menunggu 4 pemain join + commit
         Revealing,  // sudah penuh, menunggu semua reveal secret
         Playing,    // seed siap, game berjalan offchain
-        Settled,    // payout sudah dicairkan
+        Settled,    // hadiah sudah dikreditkan
         Cancelled   // dibatalkan (timeout) + stake dikembalikan
     }
 
     struct Game {
-        uint256 buyIn;            // buy-in per pemain (satuan token, mis. cUSD 1e18)
+        address token;            // mata uang buy-in (address(0) = CELO native)
+        uint256 buyIn;            // buy-in per pemain (satuan terkecil token)
         address server;           // operator game engine offchain (untuk fallback settle)
         Status status;
         uint8 joined;             // jumlah pemain yang sudah join
@@ -64,27 +73,35 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
     bytes32 private constant RESULT_TYPEHASH =
         keccak256("GameResult(uint256 gameId,bytes32 rankingHash)");
 
-    IERC20 public immutable token; // stablecoin buy-in (cUSD / USDC)
-    uint16 public rakeBps;         // house cut saat ini (bps)
-    uint256 public accruedRake;    // rake yang menunggu ditarik owner
+    uint16 public rakeBps; // house cut saat ini (bps)
+
+    /// @notice Token yang boleh dipakai sebagai buy-in (address(0) = CELO native).
+    mapping(address => bool) public tokenAllowed;
+
+    /// @notice Saldo yang bisa ditarik: token => akun => jumlah.
+    mapping(address => mapping(address => uint256)) public credits;
 
     uint256 public gameCount;
     mapping(uint256 => Game) private games;
 
     event RakeUpdated(uint16 rakeBps);
-    event GameCreated(uint256 indexed gameId, address indexed organizer, uint256 buyIn, address server);
+    event TokenAllowed(address indexed token, bool allowed);
+    event GameCreated(uint256 indexed gameId, address indexed organizer, address token, uint256 buyIn, address server);
     event PlayerJoined(uint256 indexed gameId, address indexed player, uint8 seat);
     event GameFilled(uint256 indexed gameId, uint64 revealDeadline);
     event SecretRevealed(uint256 indexed gameId, address indexed player);
     event SeedReady(uint256 indexed gameId, bytes32 seed, uint64 settleDeadline);
     event GameSettled(uint256 indexed gameId, address[SEATS] ranking, uint256[SEATS] payouts, bool byServer);
     event GameCancelled(uint256 indexed gameId, Status fromStatus);
-    event RakeWithdrawn(address indexed to, uint256 amount);
+    event Credited(address indexed token, address indexed account, uint256 amount);
+    event Withdrawn(address indexed token, address indexed account, uint256 amount);
 
     error InvalidBuyIn();
     error InvalidServer();
     error InvalidPayoutWeights();
     error InvalidWindow();
+    error TokenNotAllowed();
+    error BadValue();
     error WrongStatus();
     error DeadlinePassed();
     error DeadlineNotReached();
@@ -93,19 +110,25 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
     error NotAPlayer();
     error AlreadyRevealed();
     error BadReveal();
-    error NotAllRevealed();
     error InvalidRanking();
     error BadSignature();
     error RakeTooHigh();
+    error NothingToWithdraw();
+    error NativeTransferFailed();
 
-    constructor(IERC20 _token, address initialOwner, uint16 _rakeBps)
+    /// @param initialOwner  Owner/house (penerima rake, pengelola allowlist).
+    /// @param _rakeBps      House cut awal (bps, maks 1000 = 10%).
+    /// @param initialTokens Daftar token yang langsung di-allowlist (sertakan address(0) untuk CELO native).
+    constructor(address initialOwner, uint16 _rakeBps, address[] memory initialTokens)
         EIP712("cMahjong", "1")
         Ownable(initialOwner)
     {
-        if (address(_token) == address(0)) revert InvalidServer();
         if (_rakeBps > MAX_RAKE_BPS) revert RakeTooHigh();
-        token = _token;
         rakeBps = _rakeBps;
+        for (uint256 i; i < initialTokens.length; ++i) {
+            tokenAllowed[initialTokens[i]] = true;
+            emit TokenAllowed(initialTokens[i], true);
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -118,24 +141,25 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
         emit RakeUpdated(_rakeBps);
     }
 
-    function withdrawRake(address to) external onlyOwner nonReentrant {
-        uint256 amount = accruedRake;
-        accruedRake = 0;
-        if (amount > 0) token.safeTransfer(to, amount);
-        emit RakeWithdrawn(to, amount);
+    /// @notice Tambah/cabut token dari allowlist. address(0) = CELO native.
+    function setTokenAllowed(address token, bool allowed) external onlyOwner {
+        tokenAllowed[token] = allowed;
+        emit TokenAllowed(token, allowed);
     }
 
     // ---------------------------------------------------------------------
     // Lifecycle
     // ---------------------------------------------------------------------
 
-    /// @param buyIn        Buy-in per pemain (satuan token).
+    /// @param token        Mata uang buy-in (harus di-allowlist; address(0) = CELO native).
+    /// @param buyIn        Buy-in per pemain (satuan terkecil token).
     /// @param server       Operator engine offchain (fallback settle).
     /// @param payoutBps    Bobot payout rank 1..4, harus berjumlah 10000.
     /// @param commitWindow Detik sampai meja harus terisi penuh.
     /// @param revealWindow Detik untuk fase reveal setelah penuh.
     /// @param settleWindow Detik untuk fase settle kooperatif sebelum server boleh fallback.
     function createGame(
+        address token,
         uint256 buyIn,
         address server,
         uint16[SEATS] calldata payoutBps,
@@ -143,6 +167,7 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
         uint64 revealWindow,
         uint64 settleWindow
     ) external returns (uint256 gameId) {
+        if (!tokenAllowed[token]) revert TokenNotAllowed();
         if (buyIn == 0) revert InvalidBuyIn();
         if (server == address(0)) revert InvalidServer();
         if (commitWindow == 0 || revealWindow == 0 || settleWindow == 0) revert InvalidWindow();
@@ -153,6 +178,7 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
 
         gameId = ++gameCount;
         Game storage g = games[gameId];
+        g.token = token;
         g.buyIn = buyIn;
         g.server = server;
         g.status = Status.Open;
@@ -161,12 +187,14 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
         g.settleWindow = settleWindow;
         g.commitDeadline = uint64(block.timestamp) + commitWindow;
 
-        emit GameCreated(gameId, msg.sender, buyIn, server);
+        emit GameCreated(gameId, msg.sender, token, buyIn, server);
     }
 
-    /// @notice Join meja: setor buy-in (perlu approve token dulu) + commit secret.
+    /// @notice Join meja: setor buy-in + commit secret.
+    ///         ERC20: `approve` dulu, kirim msg.value = 0.
+    ///         Native: kirim msg.value = buyIn.
     /// @param commitment keccak256(abi.encodePacked(gameId, msg.sender, secret)).
-    function joinGame(uint256 gameId, bytes32 commitment) external nonReentrant {
+    function joinGame(uint256 gameId, bytes32 commitment) external payable nonReentrant {
         Game storage g = games[gameId];
         if (g.status != Status.Open) revert WrongStatus();
         if (block.timestamp > g.commitDeadline) revert DeadlinePassed();
@@ -178,7 +206,7 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
         g.commitments[seat] = commitment;
         g.joined = seat + 1;
 
-        token.safeTransferFrom(msg.sender, address(this), g.buyIn);
+        _pullStake(g.token, g.buyIn);
         emit PlayerJoined(gameId, msg.sender, seat);
 
         if (g.joined == SEATS) {
@@ -224,7 +252,6 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
     /// @param signatures 4 tanda tangan EIP-712 dari keempat pemain (urutan bebas).
     function settle(uint256 gameId, address[SEATS] calldata ranking, bytes[SEATS] calldata signatures)
         external
-        nonReentrant
     {
         Game storage g = games[gameId];
         if (g.status != Status.Playing) revert WrongStatus();
@@ -241,13 +268,12 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
             seen[seat] = true;
         }
 
-        _payout(gameId, g, ranking, false);
+        _settlePayout(gameId, g, ranking, false);
     }
 
     /// @notice Fallback setelah settleDeadline: server meng-attest ranking (anti rage-quit).
     function settleByServer(uint256 gameId, address[SEATS] calldata ranking, bytes calldata serverSig)
         external
-        nonReentrant
     {
         Game storage g = games[gameId];
         if (g.status != Status.Playing) revert WrongStatus();
@@ -257,15 +283,15 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
         bytes32 digest = _resultDigest(gameId, ranking);
         if (ECDSA.recover(digest, serverSig) != g.server) revert BadSignature();
 
-        _payout(gameId, g, ranking, true);
+        _settlePayout(gameId, g, ranking, true);
     }
 
     // ---------------------------------------------------------------------
     // Cancellation / forfeit
     // ---------------------------------------------------------------------
 
-    /// @notice Batalkan meja yang tak penuh setelah commitDeadline; kembalikan buy-in para joiner.
-    function cancelUnfilled(uint256 gameId) external nonReentrant {
+    /// @notice Batalkan meja yang tak penuh setelah commitDeadline; kreditkan refund buy-in.
+    function cancelUnfilled(uint256 gameId) external {
         Game storage g = games[gameId];
         if (g.status != Status.Open) revert WrongStatus();
         if (block.timestamp <= g.commitDeadline) revert DeadlineNotReached();
@@ -273,7 +299,7 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
         g.status = Status.Cancelled;
         uint256 n = g.joined;
         for (uint256 i; i < n; ++i) {
-            token.safeTransfer(g.players[i], g.buyIn);
+            _credit(g.token, g.players[i], g.buyIn);
         }
         emit GameCancelled(gameId, Status.Open);
     }
@@ -281,31 +307,45 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
     /// @notice Setelah revealDeadline lewat tanpa semua reveal: pemain yang menahan game
     ///         FORFEIT stake-nya, dibagi rata ke pemain yang sudah reveal. Bila tak ada
     ///         satu pun yang reveal, kembalikan semua buy-in.
-    function cancelUnrevealed(uint256 gameId) external nonReentrant {
+    function cancelUnrevealed(uint256 gameId) external {
         Game storage g = games[gameId];
         if (g.status != Status.Revealing) revert WrongStatus();
         if (block.timestamp <= g.revealDeadline) revert DeadlineNotReached();
 
         g.status = Status.Cancelled;
+        address token = g.token;
         uint256 revealedCount = g.revealedCount;
         uint256 buyIn = g.buyIn;
 
         if (revealedCount == 0) {
-            for (uint256 i; i < SEATS; ++i) token.safeTransfer(g.players[i], buyIn);
+            for (uint256 i; i < SEATS; ++i) _credit(token, g.players[i], buyIn);
         } else {
             uint256 forfeitPool = (SEATS - revealedCount) * buyIn;
             uint256 share = forfeitPool / revealedCount;
             uint256 distributed;
             for (uint256 i; i < SEATS; ++i) {
                 if (g.revealed[i]) {
-                    token.safeTransfer(g.players[i], buyIn + share);
+                    _credit(token, g.players[i], buyIn + share);
                     distributed += share;
                 }
             }
             // sisa pembagian (dust) masuk ke rake house
-            accruedRake += forfeitPool - distributed;
+            if (forfeitPool > distributed) _credit(token, owner(), forfeitPool - distributed);
         }
         emit GameCancelled(gameId, Status.Revealing);
+    }
+
+    // ---------------------------------------------------------------------
+    // Withdraw (pull payment)
+    // ---------------------------------------------------------------------
+
+    /// @notice Tarik seluruh saldo `token` (address(0) = CELO native) milik pemanggil.
+    function withdraw(address token) external nonReentrant {
+        uint256 amount = credits[token][msg.sender];
+        if (amount == 0) revert NothingToWithdraw();
+        credits[token][msg.sender] = 0;
+        _send(token, msg.sender, amount);
+        emit Withdrawn(token, msg.sender, amount);
     }
 
     // ---------------------------------------------------------------------
@@ -324,6 +364,10 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
         return games[gameId].seed;
     }
 
+    function creditOf(address token, address account) external view returns (uint256) {
+        return credits[token][account];
+    }
+
     /// @notice Hitung commitment yang harus dikirim saat joinGame (helper untuk frontend/backend).
     function commitmentOf(uint256 gameId, address player, bytes32 secret) external pure returns (bytes32) {
         return keccak256(abi.encodePacked(gameId, player, secret));
@@ -338,11 +382,12 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
     // Internal
     // ---------------------------------------------------------------------
 
-    function _payout(uint256 gameId, Game storage g, address[SEATS] calldata ranking, bool byServer)
+    function _settlePayout(uint256 gameId, Game storage g, address[SEATS] calldata ranking, bool byServer)
         private
     {
-        g.status = Status.Settled; // effects sebelum interactions
+        g.status = Status.Settled; // effects sebelum interactions (kredit)
 
+        address token = g.token;
         uint256 pot = g.buyIn * SEATS;
         uint256 rake = (pot * rakeBps) / BPS_DENOMINATOR;
         uint256 distributable = pot - rake;
@@ -354,13 +399,39 @@ contract MahjongTable is EIP712, Ownable, ReentrancyGuard {
             payouts[i] = amount;
             paid += amount;
         }
-        // dust pembulatan masuk ke rake house
-        accruedRake += rake + (distributable - paid);
+        // rake + dust pembulatan masuk ke house
+        uint256 houseCut = rake + (distributable - paid);
+        if (houseCut > 0) _credit(token, owner(), houseCut);
 
         for (uint256 i; i < SEATS; ++i) {
-            if (payouts[i] > 0) token.safeTransfer(ranking[i], payouts[i]);
+            if (payouts[i] > 0) _credit(token, ranking[i], payouts[i]);
         }
         emit GameSettled(gameId, ranking, payouts, byServer);
+    }
+
+    /// @dev Tarik stake masuk: native lewat msg.value, ERC20 lewat transferFrom.
+    function _pullStake(address token, uint256 amount) private {
+        if (token == NATIVE) {
+            if (msg.value != amount) revert BadValue();
+        } else {
+            if (msg.value != 0) revert BadValue();
+            IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        }
+    }
+
+    function _credit(address token, address to, uint256 amount) private {
+        credits[token][to] += amount;
+        emit Credited(token, to, amount);
+    }
+
+    /// @dev Kirim keluar: native lewat call, ERC20 lewat safeTransfer.
+    function _send(address token, address to, uint256 amount) private {
+        if (token == NATIVE) {
+            (bool ok,) = payable(to).call{value: amount}("");
+            if (!ok) revert NativeTransferFailed();
+        } else {
+            IERC20(token).safeTransfer(to, amount);
+        }
     }
 
     function _resultDigest(uint256 gameId, address[SEATS] calldata ranking) private view returns (bytes32) {
