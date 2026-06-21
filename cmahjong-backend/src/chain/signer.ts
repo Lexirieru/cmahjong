@@ -20,9 +20,16 @@ export function domain(contract: string, chainId: number): TypedDataDomain {
   return { name: "cMahjong", version: "1", chainId, verifyingContract: contract };
 }
 
-/** rankingHash = keccak256(abi.encodePacked(ranking[0..3])). */
+/**
+ * rankingHash = keccak256(abi.encodePacked(address[4] ranking)).
+ *
+ * PENTING: di Solidity, `abi.encodePacked` pada array fixed (address[4]) MEM-PAD
+ * tiap elemen ke 32 byte — BUKAN 20 byte seperti address tunggal. Jadi tipe yang
+ * benar di sini adalah "address[4]" (terverifikasi cocok dengan resultDigest on-chain),
+ * bukan empat "address" terpisah. Salah satu ini menyebabkan revert NotAPlayer.
+ */
 export function rankingHash(ranking: [string, string, string, string]): string {
-  return solidityPackedKeccak256(["address", "address", "address", "address"], ranking);
+  return solidityPackedKeccak256(["address[4]"], [ranking]);
 }
 
 /**

@@ -34,4 +34,19 @@ describe("signer EIP-712 GameResult", () => {
   it("rankingHash konsisten (packed keccak)", () => {
     expect(rankingHash(ranking)).toMatch(/^0x[0-9a-f]{64}$/);
   });
+
+  // REGRESI: packing address[4] HARUS cocok dengan abi.encodePacked di kontrak
+  // (pad 32B). Nilai ini diverifikasi cocok dengan resultDigest on-chain saat e2e
+  // settle mainnet (tx 0x33fca72...). Bila berubah -> settle akan revert NotAPlayer.
+  it("rankingHash sesuai abi.encodePacked(address[4]) on-chain", () => {
+    const onchainRanking: [string, string, string, string] = [
+      "0xE75223EA0e0aB0C126398f3fAa43148d4D3C8EF2",
+      "0x318aEac898507A338835751Bd1E23aa44400Fdd5",
+      "0x75C7Ba8Ee6BfCbf874ABB76e38532949E593908D",
+      "0x0FE7095397D26369B7b4B8c7c0202C340748b2f6",
+    ];
+    expect(rankingHash(onchainRanking)).toBe(
+      "0xeb38fc41e814b7780ac03367f58f6e8606bd4766116aeb13993d5a170669edd0",
+    );
+  });
 });

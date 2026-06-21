@@ -8,3 +8,6 @@ coverage/
 .DS_Store
 # Prisma generated client
 src/generated/
+
+# e2e test wallets (recovery keys)
+scripts/.e2e-wallets.json
