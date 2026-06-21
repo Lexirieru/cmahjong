@@ -29,10 +29,21 @@ export default function Page() {
 
   // Pulihkan navigasi saat refresh + dukung pratinjau (?preview=table) — di-effect agar tak bentrok hydration
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("preview") === "table") {
+    const q = new URLSearchParams(window.location.search);
+    const pv = q.get("preview");
+    if (pv === "table") {
       setPreview(true);
       setGameId(0n);
       setScreen("game");
+      return;
+    }
+    if (pv === "history") {
+      setScreen("history");
+      return;
+    }
+    if (pv === "replay" && q.get("game")) {
+      setReplayId(q.get("game"));
+      setScreen("replay");
       return;
     }
     try {

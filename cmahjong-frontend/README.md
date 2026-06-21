@@ -13,11 +13,16 @@ Home ──► Create table ──► Lobby ──► Table ──► Result
      └──► Join a table ──┘         (live board)  (withdraw)
 ```
 
-- **Home** — connect (auto in MiniPay), start or join a table.
+- **Home** — connect (auto in MiniPay), start or join a table, history.
 - **Create** — pick currency (cUSD / USDC / USDT / CELO), set the buy-in, create on-chain.
 - **Lobby** — join (approve + stake + commit), reveal, watch players fill up.
 - **Table** — the live board: opponents, dora, discard rivers, your hand, calls.
 - **Result** — your winnings, withdraw to wallet.
+- **History / Replay** — past games + step-through replay (board reconstructed
+  from the move log via `GET /games/:id/replay/states`).
+
+Preview without wallet/backend: `/?preview=table`, `/?preview=history`,
+`/?preview=replay&game=<id>`.
 
 ## Stack notes
 
