@@ -288,19 +288,23 @@ export class GameService implements OnModuleInit {
 
   discard(chainGameId: string, seat: number, tileId: number): RoundOutcome | null {
     const out = this.round(chainGameId).discard(seat, tileId);
+    this.logMove(chainGameId, "discard", seat, { tileId });
     this.queueSnapshot(chainGameId);
     return out;
   }
 
   riichi(chainGameId: string, seat: number, tileId: number): void {
     this.round(chainGameId).declareRiichi(seat, tileId);
+    this.logMove(chainGameId, "riichi", seat, { tileId });
     this.queueSnapshot(chainGameId);
   }
 
   tsumo(chainGameId: string, seat: number): RoundOutcome {
     const round = this.round(chainGameId);
     if (round.turn !== seat) throw new Error("bukan giliran seat ini");
-    return round.declareTsumo();
+    const out = round.declareTsumo();
+    this.logMove(chainGameId, "tsumo", seat);
+    return out;
   }
 
   availableCalls(chainGameId: string) {
@@ -310,12 +314,14 @@ export class GameService implements OnModuleInit {
   /** Respons call seorang pemain (pon/chi/kan/ron/pass); resolusi prioritas otomatis. */
   respond(chainGameId: string, seat: number, claim: CallClaim): CallResolution {
     const res = this.round(chainGameId).respond(seat, claim);
+    this.logMove(chainGameId, claim.type, seat, claim.low !== undefined ? { low: claim.low } : {});
     this.queueSnapshot(chainGameId);
     return res;
   }
 
   ankan(chainGameId: string, seat: number, kind: number): RoundOutcome | null {
     const out = this.round(chainGameId).ankan(seat, kind);
+    this.logMove(chainGameId, "ankan", seat, { kind });
     this.queueSnapshot(chainGameId);
     return out;
   }
@@ -323,6 +329,7 @@ export class GameService implements OnModuleInit {
   /** Shouminkan (tambah pon -> kan); bisa memicu fase chankan. */
   addedKan(chainGameId: string, seat: number, kind: number): RoundOutcome | null {
     const out = this.round(chainGameId).addedKan(seat, kind);
+    this.logMove(chainGameId, "addedkan", seat, { kind });
     this.queueSnapshot(chainGameId);
     return out;
   }
