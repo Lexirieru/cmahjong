@@ -63,12 +63,13 @@ export class GameGateway implements OnGatewayConnection {
 
   @SubscribeMessage("start")
   async onStart(
-    @MessageBody() body: { gameId: string; seed?: string; players?: string[]; dealer?: number },
+    @MessageBody()
+    body: { gameId: string; seed?: string; players?: string[]; length?: "east" | "hanchan" },
   ) {
     await this.games.startRound(body.gameId, {
       seed: body.seed,
       players: body.players,
-      dealer: body.dealer,
+      length: body.length,
     });
     this.broadcastState(body.gameId);
     return { ok: true };
@@ -93,6 +94,48 @@ export class GameGateway implements OnGatewayConnection {
     return { ok: true };
   }
 
+  @SubscribeMessage("pass")
+  async onPass(@MessageBody() body: { gameId: string }) {
+    const outcome = this.games.pass(body.gameId);
+    this.broadcastState(body.gameId);
+    if (outcome) await this.emitOutcome(body.gameId, outcome);
+    return { ok: true };
+  }
+
+  @SubscribeMessage("pon")
+  onPon(@MessageBody() body: { gameId: string; address: string }) {
+    const seat = this.games.seatOf(body.gameId, body.address);
+    this.games.pon(body.gameId, seat);
+    this.broadcastState(body.gameId);
+    return { ok: true };
+  }
+
+  @SubscribeMessage("chi")
+  onChi(@MessageBody() body: { gameId: string; address: string; low: number }) {
+    const seat = this.games.seatOf(body.gameId, body.address);
+    this.games.chi(body.gameId, seat, body.low);
+    this.broadcastState(body.gameId);
+    return { ok: true };
+  }
+
+  @SubscribeMessage("kan")
+  async onKan(@MessageBody() body: { gameId: string; address: string }) {
+    const seat = this.games.seatOf(body.gameId, body.address);
+    const outcome = this.games.kan(body.gameId, seat);
+    this.broadcastState(body.gameId);
+    if (outcome) await this.emitOutcome(body.gameId, outcome);
+    return { ok: true };
+  }
+
+  @SubscribeMessage("ankan")
+  async onAnkan(@MessageBody() body: { gameId: string; address: string; kind: number }) {
+    const seat = this.games.seatOf(body.gameId, body.address);
+    const outcome = this.games.ankan(body.gameId, seat, body.kind);
+    this.broadcastState(body.gameId);
+    if (outcome) await this.emitOutcome(body.gameId, outcome);
+    return { ok: true };
+  }
+
   @SubscribeMessage("tsumo")
   async onTsumo(@MessageBody() body: { gameId: string; address: string }) {
     const seat = this.games.seatOf(body.gameId, body.address);
@@ -110,8 +153,13 @@ export class GameGateway implements OnGatewayConnection {
   }
 
   private async emitOutcome(gameId: string, outcome: RoundOutcome) {
-    const settle = await this.games.finalizeAndSign(gameId);
-    this.server.to(gameId).emit("outcome", { outcome, settle });
-    this.broadcastState(gameId);
+    // catat ke hanchan: lanjut ronde berikut, atau selesai + settle payload
+    const end = await this.games.recordOutcome(gameId, outcome);
+    this.server.to(gameId).emit("roundEnd", end);
+    if (!end.finished) {
+      // ronde baru dimulai — klien me-refresh tangan via "join"
+      this.broadcastState(gameId);
+      this.server.to(gameId).emit("newRound", this.games.hanchanState(gameId));
+    }
   }
 }

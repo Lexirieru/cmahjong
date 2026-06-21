@@ -105,6 +105,46 @@ describe("scoreHand - yakuman", () => {
   });
 });
 
+describe("scoreHand - dengan meld terbuka (call)", () => {
+  it("open tanyao via chi tetap menang (1 han)", () => {
+    // open chi 234m; tertutup: 567p 345s 678s + 88m (pair), ron 6p
+    const counts = countsFromKinds([13, 14, 15, 20, 21, 22, 23, 24, 25, 7, 7]);
+    const r = scoreHand({
+      counts,
+      openMelds: [{ type: "sequence", kind: 1, open: true }],
+      ctx: ctx({ winningTile: 13, isTsumo: false, isMenzen: false }),
+      isDealer: false,
+    });
+    expect(r.agari).toBe(true);
+    expect(r.yaku.some((y) => y.name === "Tanyao")).toBe(true);
+  });
+
+  it("open yakuhai (pon haku) menang 1 han, tetap dihitung", () => {
+    // open pon haku; tertutup: 234m 567p 234s + 55m, ron 5m (tanki)
+    const counts = countsFromKinds([1, 2, 3, 13, 14, 15, 19, 20, 21, 4, 4]);
+    const r = scoreHand({
+      counts,
+      openMelds: [{ type: "triplet", kind: 31, open: true }],
+      ctx: ctx({ winningTile: 4, isTsumo: false, isMenzen: false }),
+      isDealer: false,
+    });
+    expect(r.agari).toBe(true);
+    expect(r.yaku.some((y) => y.name.startsWith("Yakuhai"))).toBe(true);
+  });
+
+  it("chiitoitsu TIDAK berlaku bila ada meld terbuka", () => {
+    const counts = countsFromKinds([1, 1, 3, 3, 5, 5, 13, 13]); // sisa tertutup
+    const r = scoreHand({
+      counts,
+      openMelds: [{ type: "triplet", kind: 31, open: true }],
+      ctx: ctx({ winningTile: 1, isTsumo: false, isMenzen: false }),
+      isDealer: false,
+    });
+    // bentuk tak valid sebagai standar -> bukan menang
+    expect(r.agari).toBe(false);
+  });
+});
+
 describe("scoreHand - tanpa yaku", () => {
   it("tangan valid bentuk tapi tanpa yaku tak bisa menang", () => {
     // 123m 456p 789s 123s + 99m (ada terminal -> bukan tanyao), open, tanpa yaku

@@ -103,6 +103,66 @@ export function isKokushi(counts: number[]): boolean {
   return kinds === 13 && hasPair;
 }
 
+/** Perluas sebuah meld menjadi daftar kind ubinnya. */
+export function expandMeld(m: Meld): number[] {
+  if (m.type === "sequence") return [m.kind, m.kind + 1, m.kind + 2];
+  if (m.type === "kan") return [m.kind, m.kind, m.kind, m.kind];
+  return [m.kind, m.kind, m.kind]; // triplet
+}
+
+/**
+ * Semua dekomposisi menang dengan meld tetap (hasil call/kan) digabungkan.
+ * `concealed` = counts ubin tertutup (termasuk ubin penyelesai). Setiap kan/meld
+ * mengisi satu "slot" dari 4 set; sisanya dipecah dari tangan tertutup.
+ */
+export function winningDecompositions(concealed: number[], fixedMelds: Meld[]): Decomposition[] {
+  const needed = 4 - fixedMelds.length;
+  if (needed < 0) return [];
+  const total = concealed.reduce((a, b) => a + b, 0);
+  if (total !== needed * 3 + 2) return [];
+
+  const work = concealed.slice();
+  const out: Decomposition[] = [];
+  for (let k = 0; k < NUM_KINDS; k++) {
+    if (work[k] >= 2) {
+      work[k] -= 2;
+      for (const melds of decomposeMelds(work)) {
+        if (melds.length === needed) out.push({ melds: [...fixedMelds, ...melds], pair: k });
+      }
+      work[k] += 2;
+    }
+  }
+  return out;
+}
+
+/** Daftar kind penunggu (waits) untuk tangan tertutup + meld tetap. Kosong = bukan tenpai. */
+export function tenpaiWaits(concealed: number[], fixedMelds: Meld[]): number[] {
+  const needed = 4 - fixedMelds.length;
+  const total = concealed.reduce((a, b) => a + b, 0);
+  const result: number[] = [];
+
+  if (total === needed * 3 + 1) {
+    for (let k = 0; k < NUM_KINDS; k++) {
+      if (concealed[k] >= 4) continue;
+      concealed[k]++;
+      if (winningDecompositions(concealed, fixedMelds).length > 0) result.push(k);
+      concealed[k]--;
+    }
+  }
+
+  // chiitoi/kokushi hanya berlaku untuk tangan tanpa meld terbuka
+  if (fixedMelds.length === 0 && total === 13) {
+    for (let k = 0; k < NUM_KINDS; k++) {
+      if (concealed[k] >= 4 || result.includes(k)) continue;
+      concealed[k]++;
+      const r = checkAgari(concealed);
+      if (r.chiitoitsu || r.kokushi) result.push(k);
+      concealed[k]--;
+    }
+  }
+  return result;
+}
+
 export interface AgariResult {
   win: boolean;
   standard: Decomposition[];

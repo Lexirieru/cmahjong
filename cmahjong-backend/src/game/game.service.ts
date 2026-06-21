@@ -1,17 +1,25 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ChainService } from "../chain/chain.service";
 import { Round, RoundOutcome } from "./round";
+import { Hanchan, HanchanLength } from "./hanchan";
 
 interface Room {
   chainGameId: string;
   players: string[]; // alamat per seat 0..3
   seed: string;
-  round: Round;
+  hanchan: Hanchan;
 }
 
 export interface SettlePayload {
   ranking: [string, string, string, string];
   serverSig?: string;
+}
+
+export interface RoundEnd {
+  outcome: RoundOutcome;
+  finished: boolean;
+  hanchan: ReturnType<Hanchan["state"]>;
+  settle?: SettlePayload;
 }
 
 /**
@@ -32,7 +40,7 @@ export class GameService {
    */
   async startRound(
     chainGameId: string,
-    opts?: { players?: string[]; seed?: string; dealer?: number },
+    opts?: { players?: string[]; seed?: string; length?: HanchanLength },
   ): Promise<Room> {
     let players = opts?.players;
     let seed = opts?.seed;
@@ -47,10 +55,10 @@ export class GameService {
       chainGameId,
       players,
       seed,
-      round: new Round(seed, opts?.dealer ?? 0),
+      hanchan: new Hanchan(seed, opts?.length ?? "hanchan"),
     };
     this.rooms.set(chainGameId, room);
-    this.logger.log(`Ronde dimulai untuk game ${chainGameId}`);
+    this.logger.log(`Game ${chainGameId} dimulai (${opts?.length ?? "hanchan"})`);
     return room;
   }
 
@@ -58,6 +66,24 @@ export class GameService {
     const room = this.rooms.get(chainGameId);
     if (!room) throw new NotFoundException(`game ${chainGameId} tidak ditemukan`);
     return room;
+  }
+
+  private round(chainGameId: string): Round {
+    return this.room(chainGameId).hanchan.round;
+  }
+
+  /** Catat hasil 1 ronde ke hanchan; bila game selesai, hitung & tandatangani ranking final. */
+  async recordOutcome(chainGameId: string, outcome: RoundOutcome): Promise<RoundEnd> {
+    const room = this.room(chainGameId);
+    room.hanchan.recordOutcome(outcome);
+    const finished = room.hanchan.finished;
+    const end: RoundEnd = { outcome, finished, hanchan: room.hanchan.state() };
+    if (finished) end.settle = await this.finalizeAndSign(chainGameId);
+    return end;
+  }
+
+  hanchanState(chainGameId: string) {
+    return this.room(chainGameId).hanchan.state();
   }
 
   /** Seat dari alamat pemain. */
@@ -70,39 +96,63 @@ export class GameService {
   }
 
   publicState(chainGameId: string) {
-    return this.room(chainGameId).round.publicState();
+    return this.round(chainGameId).publicState();
   }
 
   /** Tangan privat — hanya kirim ke pemilik seat. */
   handOf(chainGameId: string, seat: number) {
-    return this.room(chainGameId).round.handOf(seat);
+    return this.round(chainGameId).handOf(seat);
   }
 
   discard(chainGameId: string, seat: number, tileId: number): RoundOutcome | null {
-    return this.room(chainGameId).round.discard(seat, tileId);
+    return this.round(chainGameId).discard(seat, tileId);
   }
 
   riichi(chainGameId: string, seat: number, tileId: number): void {
-    this.room(chainGameId).round.declareRiichi(seat, tileId);
+    this.round(chainGameId).declareRiichi(seat, tileId);
   }
 
   tsumo(chainGameId: string, seat: number): RoundOutcome {
-    const room = this.room(chainGameId);
-    if (room.round.turn !== seat) throw new Error("bukan giliran seat ini");
-    return room.round.declareTsumo();
+    const round = this.round(chainGameId);
+    if (round.turn !== seat) throw new Error("bukan giliran seat ini");
+    return round.declareTsumo();
+  }
+
+  availableCalls(chainGameId: string) {
+    return this.round(chainGameId).availableCalls();
+  }
+
+  pass(chainGameId: string): RoundOutcome | null {
+    return this.round(chainGameId).pass();
+  }
+
+  pon(chainGameId: string, seat: number): void {
+    this.round(chainGameId).callPon(seat);
+  }
+
+  chi(chainGameId: string, seat: number, low: number): void {
+    this.round(chainGameId).callChi(seat, low);
+  }
+
+  kan(chainGameId: string, seat: number): RoundOutcome | null {
+    return this.round(chainGameId).callKan(seat);
+  }
+
+  ankan(chainGameId: string, seat: number, kind: number): RoundOutcome | null {
+    return this.round(chainGameId).ankan(seat, kind);
   }
 
   ron(chainGameId: string, seat: number): RoundOutcome {
-    return this.room(chainGameId).round.declareRon(seat);
+    return this.round(chainGameId).callRon(seat);
   }
 
   /**
    * Hitung ranking final (alamat juara 1..4) dan tandatangani sebagai server
-   * untuk settleByServer di kontrak.
+   * untuk settleByServer di kontrak. Memakai poin akhir hanchan.
    */
   async finalizeAndSign(chainGameId: string): Promise<SettlePayload> {
     const room = this.room(chainGameId);
-    const order = room.round.ranking(); // seat terurut
+    const order = room.hanchan.finalRanking(); // seat terurut poin akhir
     const ranking = order.map((seat) => room.players[seat]) as [
       string,
       string,

@@ -22,7 +22,10 @@ src/
     signer.ts      EIP-712 GameResult (untuk settleByServer)
     chain.service  baca game on-chain + tandatangan server
   game/          State machine + realtime
-    round.ts       mekanik 1 ronde (draw/discard/riichi/tsumo/ron/ranking)
+    round.ts       mekanik 1 ronde: draw/discard/call(pon/chi/kan)/ankan/riichi/
+                   tsumo/ron/exhaustive draw + noten payment
+    hanchan.ts     orkestrasi multi-ronde: rotasi dealer, wind East→South,
+                   honba, riichi sticks, renchan, ranking final
     game.service   manajer room (in-memory) + finalisasi ranking & sign
     game.gateway   WebSocket (Socket.IO) event meja
   prisma/        PrismaService (mirror metadata game ke Postgres)
@@ -54,14 +57,18 @@ npm run test:engine # hanya engine
 
 ## Status & roadmap
 
-Sudah jalan & teruji: engine deterministik, agari (3 bentuk), set yaku inti +
-yakuman, scoring fu/han, mekanik ronde (draw/discard/riichi/tsumo/ron/ranking),
-commit/seed mirror kontrak, EIP-712 signer, gateway WS, skema Postgres.
+Sudah jalan & teruji (49 test):
+- Engine deterministik, agari (3 bentuk), yaku inti + yakuman, scoring fu/han
+- Scoring dengan **meld terbuka & kan** (dora atas seluruh ubin)
+- Mekanik ronde lengkap: **call pon/chi/daiminkan**, **ankan/shouminkan** (+rinshan/kan-dora),
+  riichi (cek tenpai), tsumo, ron, exhaustive draw + **noten payment**
+- **Hanchan** multi-ronde: rotasi dealer, East→South, **honba**, **riichi sticks**,
+  renchan (dealer menang/tenpai), ranking final
+- commit/seed mirror kontrak, EIP-712 signer, gateway WS, skema Postgres
 
 TODO lanjutan:
-- Call **pon/chi/kan** + interupsi giliran (out-of-turn)
-- Furiten, ippatsu, uradora, dora setelah kan
-- Multi-ronde **hanchan** (East + South) + renchan dealer
+- Furiten penuh, ippatsu, uradora, chankan (rob kan), multi-ron
+- Prioritas call bersamaan (ron > pon/kan > chi) di level orkestrator
 - Persist penuh state ronde ke Postgres (replay/resume)
 - Auth pemain (verifikasi tanda tangan wallet) di gateway
 - Endpoint settle: relay ranking + signature ke kontrak
