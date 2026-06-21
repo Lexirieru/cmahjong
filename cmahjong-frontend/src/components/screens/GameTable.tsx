@@ -123,10 +123,10 @@ export function GameTable({
 
       {/* tangan saya */}
       <div className="pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="mb-2 flex min-h-[68px] flex-wrap items-end justify-center gap-[3px]">
+        <div className="mb-2 flex min-h-[56px] flex-wrap items-end justify-center gap-[2px]">
           {hand.map((t, i) => (
-            <div key={t.id} style={{ marginLeft: i === hand.length - 1 ? 8 : 0 }}>
-              <Tile kind={t.kind} width={34} onClick={myTurn ? () => tapTile(t) : undefined} />
+            <div key={t.id} style={{ marginLeft: i === hand.length - 1 ? 6 : 0 }}>
+              <Tile kind={t.kind} width={24} onClick={myTurn ? () => tapTile(t) : undefined} />
             </div>
           ))}
         </div>
