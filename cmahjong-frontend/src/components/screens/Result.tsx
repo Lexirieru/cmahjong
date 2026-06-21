@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { formatUnits, type Address } from "viem";
 import { Button } from "@/components/Button";
-import { getWalletClient } from "@/lib/chain";
+import { ensureCeloChain, getWalletClient } from "@/lib/chain";
 import {
   MAHJONG_ADDRESS,
   legacyGas,
@@ -47,6 +47,7 @@ export function Result({
     setBusy(true);
     setError(null);
     try {
+      await ensureCeloChain();
       const gas = await legacyGas();
       await sendLegacy(
         wallet.writeContract({

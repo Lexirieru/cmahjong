@@ -42,3 +42,25 @@ export async function legacyGas() {
   const gasPrice = await publicClient.getGasPrice();
   return { gasPrice, type: "legacy" as const };
 }
+
+/**
+ * Pastikan wallet berada di Celo sebelum mengirim transaksi. Bila berbeda jaringan,
+ * minta wallet pindah (tambahkan jaringan dulu bila belum ada). Di MiniPay ini no-op.
+ */
+export async function ensureCeloChain() {
+  const wallet = getWalletClient();
+  if (!wallet) throw new Error("No wallet connected");
+  const current = await wallet.getChainId();
+  if (current === celo.id) return;
+  try {
+    await wallet.switchChain({ id: celo.id });
+  } catch (err) {
+    const e = err as { code?: number; message?: string };
+    if (e.code === 4902 || /unrecognized|not added|add this/i.test(e.message ?? "")) {
+      await wallet.addChain({ chain: celo });
+      await wallet.switchChain({ id: celo.id });
+    } else {
+      throw new Error("Switch your wallet to the Celo network to continue");
+    }
+  }
+}

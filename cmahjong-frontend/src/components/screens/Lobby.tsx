@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { formatUnits, type Address } from "viem";
 import { Button } from "@/components/Button";
 import { BackTitle } from "./CreateTable";
-import { getWalletClient } from "@/lib/chain";
+import { ensureCeloChain, getWalletClient } from "@/lib/chain";
 import {
   GameView,
   MAHJONG_ADDRESS,
@@ -59,6 +59,7 @@ export function Lobby({
     setBusy(true);
     setError(null);
     try {
+      await ensureCeloChain();
       const secret = randomSecret();
       saveSecret(gameId, address, secret);
       const commitment = commitmentOf(gameId, address, secret);
@@ -115,6 +116,7 @@ export function Lobby({
     setBusy(true);
     setError(null);
     try {
+      await ensureCeloChain();
       const gas = await legacyGas();
       await sendLegacy(
         wallet.writeContract({

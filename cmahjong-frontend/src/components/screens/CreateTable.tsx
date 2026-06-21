@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { parseUnits, type Address } from "viem";
 import { Button } from "@/components/Button";
-import { getWalletClient } from "@/lib/chain";
+import { ensureCeloChain, getWalletClient } from "@/lib/chain";
 import { MAHJONG_ADDRESS, mahjongAbi, legacyGas, readGameCount, sendLegacy } from "@/lib/contract";
 import { TOKENS } from "@/lib/tokens";
 import { fmt } from "@/lib/format";
@@ -34,6 +34,7 @@ export function CreateTable({
     if (!wallet || !amount || Number(amount) <= 0) return;
     setBusy(true);
     try {
+      await ensureCeloChain();
       const buyIn = parseUnits(amount, token.decimals);
       const gas = await legacyGas();
       await sendLegacy(
