@@ -31,6 +31,7 @@ body {
   color: var(--color-ivory);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+  overflow-x: hidden;
 }
 
 .app-shell {
@@ -40,6 +41,7 @@ body {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  overflow-x: clip;
 }
 
 .surface {

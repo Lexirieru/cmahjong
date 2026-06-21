@@ -37,8 +37,10 @@ export function Home({ address, inMiniPay, connecting, connect, onCreate, onJoin
           ))}
         </div>
 
-        <h1 className="text-3xl font-bold tracking-tight">Real mahjong, real stakes</h1>
-        <p className="mt-3 max-w-xs text-[15px] leading-relaxed text-ivory/65">
+        <h1 className="max-w-[15rem] text-[28px] font-bold leading-[1.1] tracking-tight">
+          Real mahjong, real stakes
+        </h1>
+        <p className="mt-3 max-w-[17rem] text-[15px] leading-relaxed text-ivory/65">
           Four players each put in a buy-in. Play a full hand of riichi mahjong, and the pot is
           paid out by final standing.
         </p>
