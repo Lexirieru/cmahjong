@@ -29,8 +29,23 @@ src/
                    honba, riichi sticks, renchan, ranking final
     game.service   manajer room (in-memory) + finalisasi ranking & sign
     game.gateway   WebSocket (Socket.IO) event meja
+  settlement/    Pencairan on-chain
+    settlement.service  kumpul tanda tangan pemain -> settle / fallback server
+    settlement.controller  REST: status, submit sig, typed-data, server-fallback
   prisma/        PrismaService (mirror metadata game ke Postgres)
 ```
+
+### Alur settle (loop duit penuh)
+1. Hanchan selesai → backend hitung **ranking final** & buka sesi settle
+   (event WS `settleReady`, atau `GET /settlement/:id`).
+2. Klien ambil payload EIP-712 (`GET /settlement/:id/typed-data`), tiap pemain
+   `signTypedData`, lalu kirim via WS `submitSignature` atau
+   `POST /settlement/:id/signature`.
+3. Saat **4 tanda tangan** terkumpul → backend submit `settle` kooperatif on-chain
+   (server bayar gas, siapa pun boleh memanggil).
+4. Bila ada yang menolak TTD sampai `settleDeadline` → `POST /settlement/:id/server-fallback`
+   memicu `settleByServer` (server attest; kontrak menegakkan deadline).
+5. Hadiah dikreditkan di kontrak → pemenang `withdraw`.
 
 ### Provably fair
 Seed = `keccak256(secret0..3)` dari commit–reveal on-chain. `wall.ts` mengocok tembok
@@ -70,8 +85,10 @@ Sudah jalan & teruji (55 test):
   renchan (dealer menang/tenpai), ranking final
 - commit/seed mirror kontrak, EIP-712 signer, gateway WS, skema Postgres
 
+- **Settle on-chain**: kumpul tanda tangan pemain → `settle` kooperatif, atau
+  `settleByServer` fallback; ekspos EIP-712 typed-data + REST/WS endpoint
+
 TODO lanjutan:
 - Persist penuh state ronde ke Postgres (replay/resume)
 - Auth pemain (verifikasi tanda tangan wallet) di gateway
-- Endpoint settle: relay ranking + signature ke kontrak (loop duit penuh)
 - Frontend MiniPay
