@@ -87,8 +87,11 @@ Sudah jalan & teruji (55 test):
 
 - **Settle on-chain**: kumpul tanda tangan pemain → `settle` kooperatif, atau
   `settleByServer` fallback; ekspos EIP-712 typed-data + REST/WS endpoint
+- **Persist Postgres**: lifecycle game + hasil akhir di-mirror (GameTable/Seat:
+  status, seed, players, ranking final, poin akhir) — best-effort, tahan restart
 
 TODO lanjutan:
-- Persist penuh state ronde ke Postgres (replay/resume)
+- Persist penuh STATE RONDE LIVE ke Postgres (resume game di tengah jalan)
+- Log Move per aksi (replay)
 - Auth pemain (verifikasi tanda tangan wallet) di gateway
 - Frontend MiniPay

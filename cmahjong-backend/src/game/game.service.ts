@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ChainService } from "../chain/chain.service";
 import { SettlementService } from "../settlement/settlement.service";
+import { PrismaService } from "../prisma/prisma.service";
 import { CallClaim, CallResolution, Round, RoundOutcome } from "./round";
 import { Hanchan, HanchanLength } from "./hanchan";
 
@@ -36,7 +37,63 @@ export class GameService {
   constructor(
     private readonly chain: ChainService,
     private readonly settlement: SettlementService,
+    private readonly prisma: PrismaService,
   ) {}
+
+  /** Mirror lifecycle game ke Postgres (best-effort; DB mati tak mengganggu gameplay). */
+  private async persistStart(room: Room) {
+    try {
+      let token = "";
+      let buyIn = "0";
+      let server = "";
+      if (this.chain.configured) {
+        try {
+          const g = await this.chain.readGame(BigInt(room.chainGameId));
+          token = g.token;
+          buyIn = g.buyIn.toString();
+          server = g.server;
+        } catch {
+          /* game offchain/test */
+        }
+      }
+      await this.prisma.gameTable.upsert({
+        where: { chainGameId: room.chainGameId },
+        update: { status: "PLAYING", seed: room.seed },
+        create: {
+          chainGameId: room.chainGameId,
+          token,
+          buyIn,
+          server,
+          status: "PLAYING",
+          seed: room.seed,
+          seats: {
+            create: room.players.map((address, seatIndex) => ({ seatIndex, address })),
+          },
+        },
+      });
+    } catch (e) {
+      this.logger.warn(`persistStart gagal: ${(e as Error).message}`);
+    }
+  }
+
+  private async persistSettled(chainGameId: string, ranking: string[], points: number[]) {
+    try {
+      await this.prisma.gameTable.update({
+        where: { chainGameId },
+        data: { status: "SETTLED", finalRanking: ranking },
+      });
+      await Promise.all(
+        points.map((p, seatIndex) =>
+          this.prisma.seat.updateMany({
+            where: { table: { chainGameId }, seatIndex },
+            data: { finalPoints: p },
+          }),
+        ),
+      );
+    } catch (e) {
+      this.logger.warn(`persistSettled gagal: ${(e as Error).message}`);
+    }
+  }
 
   /**
    * Mulai ronde untuk sebuah game. Seed diambil dari on-chain bila tersedia,
@@ -67,6 +124,7 @@ export class GameService {
     };
     this.rooms.set(chainGameId, room);
     this.logger.log(`Game ${chainGameId} dimulai (${opts?.length ?? "hanchan"})`);
+    void this.persistStart(room);
     return room;
   }
 
@@ -90,6 +148,7 @@ export class GameService {
       end.settle = await this.finalizeAndSign(chainGameId);
       // buka sesi settle: pemain dapat submit tanda tangan untuk `settle` kooperatif
       this.settlement.open(chainGameId, room.players, end.settle.ranking);
+      void this.persistSettled(chainGameId, end.settle.ranking, room.hanchan.points);
     }
     return end;
   }
