@@ -23,6 +23,7 @@ export interface GameView {
   status: GameStatus;
   joined: number;
   players: Address[];
+  revealed: boolean[];
   seed: `0x${string}`;
 }
 
@@ -40,6 +41,7 @@ export async function readGame(gameId: bigint): Promise<GameView> {
     status: STATUS[g.status] ?? "None",
     joined: g.joined,
     players: [...g.players],
+    revealed: [...g.revealed],
     seed: g.seed,
   };
 }
