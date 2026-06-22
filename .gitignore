@@ -30,3 +30,7 @@ yarn-error.log*
 .DS_Store
 *.tsbuildinfo
 .vercel
+
+# installed skills (local tooling)
+.agents/
+skills-lock.json
