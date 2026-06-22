@@ -4,7 +4,7 @@ import { useState } from "react";
 import { parseUnits, type Address } from "viem";
 import { Button } from "@/components/Button";
 import { ensureCeloChain, getWalletClient } from "@/lib/chain";
-import { MAHJONG_ADDRESS, mahjongAbi, legacyGas, readGameCount, sendLegacy } from "@/lib/contract";
+import { MAHJONG_ADDRESS, mahjongAbi, legacyGas, sendCreateGame } from "@/lib/contract";
 import { TOKENS } from "@/lib/tokens";
 import { fmt } from "@/lib/format";
 
@@ -37,7 +37,7 @@ export function CreateTable({
       await ensureCeloChain();
       const buyIn = parseUnits(amount, token.decimals);
       const gas = await legacyGas();
-      await sendLegacy(
+      const id = await sendCreateGame(
         wallet.writeContract({
           address: MAHJONG_ADDRESS,
           abi: mahjongAbi,
@@ -47,7 +47,6 @@ export function CreateTable({
           ...gas,
         }),
       );
-      const id = await readGameCount();
       onCreated(id);
     } catch (e) {
       setError((e as Error).message.split("\n")[0]);

@@ -1,8 +1,9 @@
-import { parseAbi, type Address } from "viem";
+import { parseAbi, parseEventLogs, type Address } from "viem";
 import { MAHJONG_ADDRESS, legacyGas, publicClient } from "./chain";
 
 export const mahjongAbi = parseAbi([
   "function createGame(address token,uint256 buyIn,address server,uint16[4] payoutBps,uint64 commitWindow,uint64 revealWindow,uint64 settleWindow) returns (uint256)",
+  "event GameCreated(uint256 indexed gameId, address indexed creator, address token, uint256 buyIn, address server)",
   "function joinGame(uint256 gameId, bytes32 commitment) payable",
   "function revealSeed(uint256 gameId, bytes32 secret)",
   "function withdraw(address token)",
@@ -70,6 +71,18 @@ export async function sendLegacy(
   const hash = await hashPromise;
   await publicClient.waitForTransactionReceipt({ hash });
   return hash;
+}
+
+/** Create a game and read the new gameId from the GameCreated event (robust to RPC
+ *  read lag — never relies on a possibly-stale gameCount). */
+export async function sendCreateGame(
+  hashPromise: Promise<`0x${string}`>,
+): Promise<bigint> {
+  const hash = await hashPromise;
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  const logs = parseEventLogs({ abi: mahjongAbi, eventName: "GameCreated", logs: receipt.logs });
+  if (!logs.length) throw new Error("GameCreated event not found in receipt");
+  return logs[0].args.gameId;
 }
 
 export { MAHJONG_ADDRESS, legacyGas };
