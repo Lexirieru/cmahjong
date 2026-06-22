@@ -33,7 +33,7 @@ contract MahjongTableTest is Test {
 
         address[] memory toks = new address[](2);
         toks[0] = address(token);
-        toks[1] = NATIVE; // CELO native
+        toks[1] = NATIVE; // native CELO
         mahjong = _deployProxy(RAKE_BPS, toks);
 
         (server, serverPk) = makeAddrAndKey("server");
@@ -43,7 +43,7 @@ contract MahjongTableTest is Test {
             players[i] = a;
             pks[i] = k;
             token.mint(a, START_BAL);
-            vm.deal(a, START_BAL); // saldo native untuk game CELO
+            vm.deal(a, START_BAL); // native balance for CELO games
             vm.prank(a);
             token.approve(address(mahjong), type(uint256).max);
         }
@@ -51,7 +51,7 @@ contract MahjongTableTest is Test {
 
     // ----------------------------------------------------------------- helpers
 
-    /// @dev Deploy implementation + ERC1967Proxy lalu initialize (pola UUPS).
+    /// @dev Deploy implementation + ERC1967Proxy then initialize (UUPS pattern).
     function _deployProxy(uint16 rakeBps_, address[] memory toks) internal returns (MahjongTable) {
         MahjongTable impl = new MahjongTable();
         bytes memory data = abi.encodeCall(MahjongTable.initialize, (owner, rakeBps_, toks));
@@ -153,7 +153,7 @@ contract MahjongTableTest is Test {
     }
 
     function test_RevertWhen_Implementation_InitializeDisabled() public {
-        // implementasi mentah (bukan proxy) tak boleh di-initialize
+        // the raw implementation (not the proxy) must not be initializable
         MahjongTable impl = new MahjongTable();
         address[] memory toks = _erc20Only();
         vm.expectRevert(); // InvalidInitialization (_disableInitializers)
@@ -163,7 +163,7 @@ contract MahjongTableTest is Test {
     // =============================================================== upgrade
 
     function test_UpgradeToV2_PreservesState() public {
-        // bangun state: 1 game settled
+        // build state: 1 settled game
         uint256 gameId = _createGame();
         _toPlaying(gameId);
         address[4] memory ranking = _orderedRanking();
@@ -177,13 +177,13 @@ contract MahjongTableTest is Test {
 
         MahjongTableV2 upgraded = MahjongTableV2(payable(address(mahjong)));
         assertEq(upgraded.version(), "v2");
-        // state lama terjaga melewati upgrade
+        // old state is preserved across the upgrade
         assertEq(upgraded.gameCount(), countBefore);
         assertEq(upgraded.creditOf(address(token), players[0]), creditBefore);
         assertEq(upgraded.owner(), owner);
         assertTrue(upgraded.tokenAllowed(NATIVE));
 
-        // fungsi & storage baru berfungsi
+        // new function & storage work
         vm.prank(owner);
         upgraded.setNote("hello");
         assertEq(upgraded.note(), "hello");
@@ -328,7 +328,7 @@ contract MahjongTableTest is Test {
     function test_RevertWhen_JoinGame_NoAllowance() public {
         uint256 gameId = _createGame();
         address broke = makeAddr("broke");
-        token.mint(broke, START_BAL); // punya saldo tapi tak approve
+        token.mint(broke, START_BAL); // has balance but did not approve
         bytes32 c = mahjong.commitmentOf(gameId, broke, _secret(0));
         vm.prank(broke);
         vm.expectRevert(); // ERC20InsufficientAllowance
@@ -340,7 +340,7 @@ contract MahjongTableTest is Test {
         bytes32 c = mahjong.commitmentOf(gameId, players[0], _secret(0));
         vm.prank(players[0]);
         vm.expectRevert(MahjongTable.BadValue.selector);
-        mahjong.joinGame{value: 1}(gameId, c); // game ERC20 tak boleh kirim native
+        mahjong.joinGame{value: 1}(gameId, c); // an ERC20 game must not receive native value
     }
 
     // ===================================================== joinGame (native)
@@ -366,7 +366,7 @@ contract MahjongTableTest is Test {
         bytes32 c = mahjong.commitmentOf(gameId, players[0], _secret(0));
         vm.prank(players[0]);
         vm.expectRevert(MahjongTable.BadValue.selector);
-        mahjong.joinGame(gameId, c); // value 0 untuk game native -> revert
+        mahjong.joinGame(gameId, c); // value 0 for a native game -> revert
     }
 
     // ============================================================ revealSeed
@@ -464,7 +464,7 @@ contract MahjongTableTest is Test {
         assertEq(mahjong.creditOf(address(token), players[3]), 0.97e18);
         assertEq(mahjong.creditOf(address(token), owner), 0.6e18); // rake
         assertEq(uint256(mahjong.getGame(gameId).status), uint256(MahjongTable.Status.Settled));
-        // konservasi: seluruh pot masih tertahan kontrak sebagai kredit
+        // conservation: the whole pot is still held by the contract as credit
         assertEq(token.balanceOf(address(mahjong)), BUY_IN * 4);
     }
 
@@ -494,12 +494,12 @@ contract MahjongTableTest is Test {
         sigs[3] = _sign(pks[1], digest);
 
         mahjong.settle(gameId, ranking, sigs);
-        assertEq(mahjong.creditOf(address(token), players[1]), 9.7e18); // juara 1
+        assertEq(mahjong.creditOf(address(token), players[1]), 9.7e18); // 1st place
     }
 
     function test_RevertWhen_Settle_WrongStatus() public {
         uint256 gameId = _createGame();
-        _joinAll(gameId); // masih Revealing
+        _joinAll(gameId); // still Revealing
         address[4] memory ranking = _orderedRanking();
         bytes[4] memory sigs = _signAll(gameId, ranking);
         vm.expectRevert(MahjongTable.WrongStatus.selector);
@@ -525,7 +525,7 @@ contract MahjongTableTest is Test {
         sigs[0] = _sign(pks[0], digest);
         sigs[1] = _sign(pks[1], digest);
         sigs[2] = _sign(pks[2], digest);
-        sigs[3] = _sign(pks[0], digest); // player0 dobel, player3 absen
+        sigs[3] = _sign(pks[0], digest); // player0 duplicated, player3 missing
         vm.expectRevert(MahjongTable.BadSignature.selector);
         mahjong.settle(gameId, ranking, sigs);
     }
@@ -588,7 +588,7 @@ contract MahjongTableTest is Test {
         vm.warp(block.timestamp + 1 hours + 1);
         mahjong.settleByServer(gameId, ranking, serverSig);
 
-        assertEq(mahjong.creditOf(address(token), players[3]), 9.7e18); // juara 1
+        assertEq(mahjong.creditOf(address(token), players[3]), 9.7e18); // 1st place
         assertEq(uint256(mahjong.getGame(gameId).status), uint256(MahjongTable.Status.Settled));
     }
 
@@ -632,7 +632,7 @@ contract MahjongTableTest is Test {
         mahjong.settle(gameId, ranking, _signAll(gameId, ranking));
 
         assertEq(mahjong.creditOf(NATIVE, players[0]), 9.7e18);
-        assertEq(address(mahjong).balance, BUY_IN * 4); // pot tertahan
+        assertEq(address(mahjong).balance, BUY_IN * 4); // pot held
 
         uint256 before = players[0].balance;
         vm.prank(players[0]);
@@ -640,7 +640,7 @@ contract MahjongTableTest is Test {
         assertEq(players[0].balance - before, 9.7e18);
         assertEq(mahjong.creditOf(NATIVE, players[0]), 0);
 
-        // owner tarik rake native
+        // owner withdraws the native rake
         vm.prank(owner);
         mahjong.withdraw(NATIVE);
         assertEq(owner.balance, 0.6e18);
@@ -691,7 +691,7 @@ contract MahjongTableTest is Test {
         vm.warp(block.timestamp + 1 hours + 1);
         mahjong.cancelUnrevealed(gameId);
 
-        uint256 share = uint256(BUY_IN) / 3; // forfeitPool 1*BUY_IN dibagi 3
+        uint256 share = uint256(BUY_IN) / 3; // forfeitPool 1*BUY_IN split by 3
         for (uint256 i; i < 3; ++i) {
             assertEq(mahjong.creditOf(address(token), players[i]), BUY_IN + share);
         }
@@ -746,21 +746,21 @@ contract MahjongTableTest is Test {
         mahjong.withdraw(address(token));
     }
 
-    /// @dev Bukti guard transient bekerja: saat withdraw native mengirim CELO ke kontrak
-    ///      penyerang, receive()-nya mencoba re-enter joinGame (yang valid bila guard absen)
-    ///      → guard menendang → seluruh withdraw revert.
+    /// @dev Proof the transient guard works: when a native withdraw sends CELO to the
+    ///      attacker contract, its receive() tries to re-enter joinGame (which would be valid
+    ///      if the guard were absent) → the guard kicks in → the whole withdraw reverts.
     function test_ReentrancyGuard_BlocksReentrantJoin() public {
         ReentrantJoiner attacker = new ReentrantJoiner(mahjong);
         vm.deal(address(attacker), 10e18);
 
-        // Game A: attacker join, tak penuh, cancelUnfilled -> kredit native untuk attacker.
+        // Game A: attacker joins, table not full, cancelUnfilled -> native credit for the attacker.
         uint256 gameA = _createNativeGame();
         attacker.join{value: BUY_IN}(gameA, bytes32(0));
         vm.warp(block.timestamp + 1 hours + 1);
         mahjong.cancelUnfilled(gameA);
         assertEq(mahjong.creditOf(NATIVE, address(attacker)), BUY_IN);
 
-        // Game B: terbuka, jadi target reentry yang VALID (bila guard absen, join-nya sukses).
+        // Game B: open, so it is a VALID reentry target (if the guard were absent, the join would succeed).
         uint256 gameB = _createNativeGame();
         attacker.arm(gameB, BUY_IN);
 
@@ -818,7 +818,7 @@ contract MahjongTableTest is Test {
         m.settle(gameId, ranking, sigs);
 
         for (uint256 i; i < 4; ++i) {
-            assertEq(m.creditOf(address(token), players[i]), BUY_IN); // setor BUY_IN, dapat BUY_IN
+            assertEq(m.creditOf(address(token), players[i]), BUY_IN); // deposit BUY_IN, receive BUY_IN
         }
         assertEq(m.creditOf(address(token), owner), 0);
     }
@@ -850,7 +850,7 @@ contract MahjongTableTest is Test {
         }
         m.settle(gameId, ranking, sigs);
 
-        assertEq(m.creditOf(address(token), players[2]), BUY_IN * 4); // ambil seluruh pot
+        assertEq(m.creditOf(address(token), players[2]), BUY_IN * 4); // takes the whole pot
         assertEq(m.creditOf(address(token), players[0]), 0);
     }
 
@@ -884,7 +884,7 @@ contract MahjongTableTest is Test {
         address[4] memory ranking = _orderedRanking();
         mahjong.settle(gameId, ranking, _signAll(gameId, ranking));
 
-        // invariant: total kredit == pot (tak ada dana tercipta/hilang)
+        // invariant: total credit == pot (no funds created/lost)
         uint256 totalCredit = mahjong.creditOf(address(token), owner);
         for (uint256 i; i < 4; ++i) {
             totalCredit += mahjong.creditOf(address(token), players[i]);
@@ -893,7 +893,7 @@ contract MahjongTableTest is Test {
     }
 }
 
-/// @notice Kontrak penyerang untuk menguji reentrancy guard transient.
+/// @notice Attacker contract to test the transient reentrancy guard.
 contract ReentrantJoiner {
     MahjongTable public immutable mahjong;
     uint256 public reenterGame;
@@ -921,7 +921,7 @@ contract ReentrantJoiner {
     receive() external payable {
         if (armed) {
             armed = false;
-            // Reentry yang VALID bila guard absen — guard transient harus memblokirnya.
+            // A reentry that is VALID if the guard is absent — the transient guard must block it.
             mahjong.joinGame{value: reenterAmt}(reenterGame, bytes32(uint256(1)));
         }
     }

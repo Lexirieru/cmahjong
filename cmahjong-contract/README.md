@@ -1,42 +1,42 @@
 # cMahjong — Contracts
 
-Smart contract escrow & settlement untuk **cMahjong**, mahjong 4 pemain di **Celo**
-(buy-in stablecoin via MiniPay). Blockchain di sini hanya berperan sebagai
-**kasir + notaris**: menahan buy-in, meng-anchor fairness, dan mencairkan hadiah.
-Logika permainan (tiles, giliran, validasi move) berjalan **offchain**.
+Smart contract escrow & settlement for **cMahjong**, a 4-player mahjong on **Celo**
+(stablecoin buy-in via MiniPay). The blockchain here acts purely as a
+**cashier + notary**: it holds the buy-in, anchors fairness, and pays out prizes.
+The game logic (tiles, turns, move validation) runs **offchain**.
 
 ## `MahjongTable.sol`
 
-Satu kontrak mengelola banyak game (`gameId => Game`). Alur 1 game:
+A single contract manages many games (`gameId => Game`). One-game flow:
 
-1. **`createGame`** — organizer set buy-in, `server` (operator engine), bobot payout
-   (uma/oka, rank 1..4, sum = 10000 bps), dan deadline (commit/reveal/settle).
-2. **`joinGame`** — 4 pemain deposit buy-in (perlu `approve` dulu) + submit
-   `commitment = keccak256(gameId, player, secret)` untuk fairness.
-3. **`revealSeed`** — tiap pemain buka secret; saat keempat terbuka,
-   `seed = keccak256(secret0..3)` di-anchor onchain (provably fair, tak ada satu
-   pihak pun yang bisa predetermine urutan tiles).
-4. **(offchain)** — game dimainkan, server menghitung ranking 1st..4th.
-5. **`settle`** — keempat pemain menandatangani ranking (EIP-712) → payout dicairkan
-   sekali di akhir (bukan tiap ronde, agar hemat fee).
-   **`settleByServer`** — fallback setelah `settleDeadline`: server meng-attest
-   ranking (anti rage-quit / pemain menolak tanda tangan).
+1. **`createGame`** — organizer sets the buy-in, `server` (engine operator), payout weights
+   (uma/oka, ranks 1..4, sum = 10000 bps), and deadlines (commit/reveal/settle).
+2. **`joinGame`** — 4 players deposit the buy-in (needs `approve` first) + submit
+   `commitment = keccak256(gameId, player, secret)` for fairness.
+3. **`revealSeed`** — each player opens their secret; once all four are open,
+   `seed = keccak256(secret0..3)` is anchored onchain (provably fair, no single
+   party can predetermine the tile order).
+4. **(offchain)** — the game is played, the server computes the 1st..4th ranking.
+5. **`settle`** — all four players sign the ranking (EIP-712) → the payout is settled
+   once at the end (not per round, to save fees).
+   **`settleByServer`** — fallback after `settleDeadline`: the server attests the
+   ranking (anti rage-quit / players refusing to sign).
 
 ### Anti-griefing / timeout
-- **`cancelUnfilled`** — meja tak penuh sampai `commitDeadline` → refund para joiner.
-- **`cancelUnrevealed`** — ada yang menahan reveal sampai `revealDeadline` → pemain
-  yang menahan **forfeit** stake-nya, dibagi rata ke yang sudah reveal.
+- **`cancelUnfilled`** — table not full by `commitDeadline` → refund the joiners.
+- **`cancelUnrevealed`** — someone stalls the reveal until `revealDeadline` → the
+  stalling player **forfeits** their stake, split evenly among those who revealed.
 
 ### Trust model (MVP)
-Server tidak bisa me-rig urutan tiles (seed patungan commit–reveal), tapi pemain
-percaya server tidak membocorkan tangan lawan. Jujur & cukup untuk hackathon.
+The server cannot rig the tile order (a pooled commit–reveal seed), but players
+trust the server not to leak opponents' hands. Honest and good enough for a hackathon.
 North star: encrypted shuffle (mental poker) → zkMahjong.
 
 ## Development
 
 ```shell
 forge build
-forge test            # banyak test: happy path, edge case, & revert path
+forge test            # many tests: happy path, edge cases, & revert paths
 forge test -vvv       # verbose
 forge fmt
 forge coverage
@@ -44,13 +44,13 @@ forge coverage
 
 ## Deploy
 
-Isi `.env` (lihat `.env.example`), lalu:
+Fill in `.env` (see `.env.example`), then:
 
 ```shell
-# Testnet Alfajores (disarankan dulu)
+# Alfajores testnet (recommended first)
 forge script script/DeployMahjongTable.s.sol --rpc-url alfajores --broadcast --verify
 
-# Mainnet Celo
+# Celo mainnet
 forge script script/DeployMahjongTable.s.sol --rpc-url celo --broadcast --verify
 ```
 

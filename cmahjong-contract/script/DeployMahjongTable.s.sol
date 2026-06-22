@@ -5,21 +5,21 @@ import {Script, console} from "forge-std/Script.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {MahjongTable} from "../src/MahjongTable.sol";
 
-/// @notice Deploy MahjongTable (UUPS) ke Celo mainnet: implementation + ERC1967Proxy,
-///         allowlist cUSD / USDC / USDT / CELO native via initialize().
+/// @notice Deploy MahjongTable (UUPS) to Celo mainnet: implementation + ERC1967Proxy,
+///         allowlisting cUSD / USDC / USDT / native CELO via initialize().
 ///
-/// Env yang dibaca:
-///   PRIVATE_KEY — deployer (sekaligus owner/house & otoritas upgrade default).
-///   RAKE_BPS    — house cut dalam bps (opsional, default 300 = 3%).
+/// Env read:
+///   PRIVATE_KEY — deployer (also the default owner/house & upgrade authority).
+///   RAKE_BPS    — house cut in bps (optional, default 300 = 3%).
 ///
-/// Jalankan (mainnet):
+/// Run (mainnet):
 ///   forge script script/DeployMahjongTable.s.sol --rpc-url celo --broadcast --verify
 contract DeployMahjongTable is Script {
-    // Token buy-in yang di-allowlist di Celo mainnet.
-    address constant CUSD = 0x765DE816845861e75A25fCA122bb6898B8B1282a; // 18 desimal
-    address constant USDC = 0xcebA9300f2b948710d2653dD7B07f33A8B32118C; // 6 desimal
-    address constant USDT = 0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e; // 6 desimal
-    address constant NATIVE_CELO = address(0); // sentinel CELO native
+    // Buy-in tokens allowlisted on Celo mainnet.
+    address constant CUSD = 0x765DE816845861e75A25fCA122bb6898B8B1282a; // 18 decimals
+    address constant USDC = 0xcebA9300f2b948710d2653dD7B07f33A8B32118C; // 6 decimals
+    address constant USDT = 0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e; // 6 decimals
+    address constant NATIVE_CELO = address(0); // native CELO sentinel
 
     function run() external returns (address proxy, address implementation) {
         uint256 pk = vm.envUint("PRIVATE_KEY");

@@ -2,19 +2,19 @@
 
 ## Celo Mainnet (chain id 42220) — UUPS Upgradeable ✅
 
-> **Alamat yang dipakai aplikasi & Talent App = PROXY.** Implementation hanya logika.
+> **The address used by the app & Talent App = PROXY.** The implementation holds only the logic.
 
-| Item | Nilai |
+| Item | Value |
 |------|-------|
 | **MahjongTable (PROXY)** | [`0xBEE2D162aD3f3de655A74Bf5E79F37bb96aE0EC4`](https://celoscan.io/address/0xBEE2D162aD3f3de655A74Bf5E79F37bb96aE0EC4) |
 | Implementation (v1) | [`0xb0b902ba7Fa60bc057684E56fAA32D3516ddaE53`](https://celoscan.io/address/0xb0b902ba7Fa60bc057684E56fAA32D3516ddaE53) |
-| Pola | UUPS (ERC1967Proxy) |
+| Pattern | UUPS (ERC1967Proxy) |
 | Owner / house / upgrader | `0x56A2950ddE6B1040d1DCC4b4C4Fc314Bd56eFB0E` |
 | Rake | 300 bps (3%) |
-| Verified | ✅ proxy & implementation di Celoscan |
+| Verified | ✅ proxy & implementation on Celoscan |
 | Compiler | solc 0.8.30, optimizer 200, evm cancun |
 
-### Allowlist token buy-in
+### Buy-in token allowlist
 | Token | Address | Decimals |
 |-------|---------|----------|
 | cUSD | `0x765DE816845861e75A25fCA122bb6898B8B1282a` | 18 |
@@ -22,16 +22,16 @@
 | USDT | `0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e` | 6 |
 | CELO (native) | `0x0000000000000000000000000000000000000000` | 18 |
 
-Owner bisa menambah/mencabut token via `setTokenAllowed(token, allowed)`.
+The owner can add/remove tokens via `setTokenAllowed(token, allowed)`.
 
 ### Upgrade (UUPS)
-Hanya owner. Deploy implementation baru lalu panggil di proxy:
-`upgradeToAndCall(newImpl, initData)` (initData `0x` bila tak ada migrasi).
+Owner only. Deploy a new implementation then call on the proxy:
+`upgradeToAndCall(newImpl, initData)` (initData `0x` if there is no migration).
 
 ---
 
 ## Deprecated
 
-| Versi | Address | Catatan |
+| Version | Address | Notes |
 |-------|---------|---------|
-| v0 (non-upgradeable) | `0x5AB8a679fd0419a15A37e530Fad4F18C10011A0c` | **Jangan dipakai.** Diganti versi UUPS di atas. |
+| v0 (non-upgradeable) | `0x5AB8a679fd0419a15A37e530Fad4F18C10011A0c` | **Do not use.** Replaced by the UUPS version above. |

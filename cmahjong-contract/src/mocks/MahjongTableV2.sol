@@ -3,11 +3,11 @@ pragma solidity ^0.8.20;
 
 import {MahjongTable} from "../MahjongTable.sol";
 
-/// @notice Implementasi V2 untuk menguji jalur upgrade UUPS.
-///         Menambahkan satu variabel storage baru (di bawah __gap) + fungsi baru,
-///         tanpa mengubah layout storage lama.
+/// @notice V2 implementation to test the UUPS upgrade path.
+///         Adds one new storage variable (below __gap) + a new function,
+///         without changing the existing storage layout.
 contract MahjongTableV2 is MahjongTable {
-    /// @dev Variabel baru — aman karena ditambahkan di akhir layout.
+    /// @dev New variable — safe because it is appended at the end of the layout.
     string public note;
 
     function setNote(string calldata _note) external onlyOwner {
