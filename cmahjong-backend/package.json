@@ -19,6 +19,9 @@
     "e2e:resume": "ts-node scripts/resume-e2e.ts",
     "e2e:replay": "ts-node scripts/replay-e2e.ts",
     "e2e:settle": "ts-node scripts/settle-e2e.ts",
+    "e2e:onchain": "ts-node scripts/onchain-test.ts",
+    "e2e:onchain-bulk": "ts-node scripts/onchain-bulk.ts",
+    "e2e:load": "ts-node scripts/load-test.ts",
     "lint": "eslint \"{src,test}/**/*.ts\" --fix"
   },
   "dependencies": {
