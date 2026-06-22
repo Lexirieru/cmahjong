@@ -11,9 +11,19 @@ interface Props {
   onCreate: () => void;
   onJoin: () => void;
   onHistory: () => void;
+  onHowTo: () => void;
 }
 
-export function Home({ address, inMiniPay, connecting, connect, onCreate, onJoin, onHistory }: Props) {
+export function Home({
+  address,
+  inMiniPay,
+  connecting,
+  connect,
+  onCreate,
+  onJoin,
+  onHistory,
+  onHowTo,
+}: Props) {
   return (
     <div className="flex flex-1 flex-col px-5">
       <div className="flex flex-1 flex-col items-center justify-center text-center">
@@ -51,9 +61,11 @@ export function Home({ address, inMiniPay, connecting, connect, onCreate, onJoin
             </Button>
           </>
         )}
-        <button onClick={onHistory} className="w-full pt-1 text-center text-xs text-ivory/45">
-          History &amp; replays
-        </button>
+        <div className="flex items-center justify-center gap-4 pt-1 text-xs text-ivory/45">
+          <button onClick={onHowTo}>How to play</button>
+          <span className="text-ivory/20">·</span>
+          <button onClick={onHistory}>History &amp; replays</button>
+        </div>
         <p className="pt-1 text-center text-xs text-ivory/40">
           Provably fair shuffle · settled on Celo
         </p>

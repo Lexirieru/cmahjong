@@ -10,11 +10,21 @@ import { GameTable } from "@/components/screens/GameTable";
 import { Result } from "@/components/screens/Result";
 import { History } from "@/components/screens/History";
 import { Replay } from "@/components/screens/Replay";
+import { HowToPlay } from "@/components/screens/HowToPlay";
 import { useWallet } from "@/hooks/useWallet";
 import { useBalances } from "@/hooks/useBalances";
 import type { Address } from "viem";
 
-type Screen = "home" | "create" | "join" | "lobby" | "game" | "result" | "history" | "replay";
+type Screen =
+  | "home"
+  | "create"
+  | "join"
+  | "lobby"
+  | "game"
+  | "result"
+  | "history"
+  | "replay"
+  | "howto";
 
 const PREVIEW_ADDR = "0x0000000000000000000000000000000000000000" as Address;
 
@@ -27,7 +37,7 @@ export default function Page() {
   const [preview, setPreview] = useState(false);
   const [replayId, setReplayId] = useState<string | null>(null);
 
-  // Pulihkan navigasi saat refresh + dukung pratinjau (?preview=table) — di-effect agar tak bentrok hydration
+  // Restore navigation on refresh + support preview (?preview=table) — in an effect so it doesn't clash with hydration
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const pv = q.get("preview");
@@ -39,6 +49,10 @@ export default function Page() {
     }
     if (pv === "history") {
       setScreen("history");
+      return;
+    }
+    if (pv === "howto") {
+      setScreen("howto");
       return;
     }
     if (pv === "replay" && q.get("game")) {
@@ -59,7 +73,7 @@ export default function Page() {
     }
   }, []);
 
-  // Simpan posisi navigasi agar refresh tidak kembali ke awal
+  // Persist navigation position so a refresh doesn't return to the start
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -89,8 +103,11 @@ export default function Page() {
           onCreate={() => setScreen("create")}
           onJoin={() => setScreen("join")}
           onHistory={() => setScreen("history")}
+          onHowTo={() => setScreen("howto")}
         />
       )}
+
+      {screen === "howto" && <HowToPlay onBack={home} />}
 
       {screen === "history" && (
         <History
