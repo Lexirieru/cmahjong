@@ -36,6 +36,7 @@ export default function Page() {
   const [seat, setSeat] = useState(0);
   const [preview, setPreview] = useState(false);
   const [replayId, setReplayId] = useState<string | null>(null);
+  const [liveAddr, setLiveAddr] = useState<Address | null>(null);
 
   // Restore navigation on refresh + support preview (?preview=table) — in an effect so it doesn't clash with hydration
   useEffect(() => {
@@ -58,6 +59,15 @@ export default function Page() {
     if (pv === "replay" && q.get("game")) {
       setReplayId(q.get("game"));
       setScreen("replay");
+      return;
+    }
+    // spectate/play a live game by URL (no wallet): ?preview=live&game=N&addr=0x..&seat=N
+    if (pv === "live" && q.get("game")) {
+      setPreview(true);
+      setLiveAddr(q.get("addr") as Address | null);
+      setSeat(Number(q.get("seat") ?? 0));
+      setGameId(BigInt(q.get("game")!));
+      setScreen("game");
       return;
     }
     try {
@@ -85,7 +95,7 @@ export default function Page() {
     }
   }, [screen, gameId, seat]);
 
-  const acct = address ?? (preview ? PREVIEW_ADDR : null);
+  const acct = address ?? liveAddr ?? (preview ? PREVIEW_ADDR : null);
 
   const home = () => setScreen("home");
   const hideHeader = screen === "game";
