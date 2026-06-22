@@ -1,13 +1,13 @@
 /**
- * Orkestrasi hanchan / tonpuusen (multi-ronde) Riichi.
+ * Orchestration of a Riichi hanchan / tonpuusen (multi-round) game.
  *
- * Mengelola: rotasi dealer, progres angin ronde (East→South), honba (counter),
- * riichi sticks (pot carryover), renchan (dealer menang / tenpai saat draw),
- * dan penentuan akhir game + ranking final.
+ * Manages: dealer rotation, round wind progression (East→South), honba (counter),
+ * riichi sticks (pot carryover), renchan (dealer wins / is tenpai at draw),
+ * and game-end determination + final ranking.
  *
- * Seed tiap ronde diturunkan deterministik dari seed kolektif on-chain:
+ * The seed for each round is derived deterministically from the collective on-chain seed:
  *   roundSeed = keccak256(abi.encodePacked(baseSeed, uint256 handIndex))
- * sehingga seluruh game tetap provably fair dari satu seed publik.
+ * so that the entire game remains provably fair from a single public seed.
  */
 import { solidityPackedKeccak256 } from "ethers";
 import { Round, RoundOutcome, RoundSnapshot, SEATS, START_POINTS } from "./round";
@@ -54,7 +54,7 @@ export class Hanchan {
     this.handIndex++;
   }
 
-  /** Catat hasil ronde, perbarui meta game, lalu mulai ronde berikut (bila belum selesai). */
+  /** Record the round result, update game meta, then start the next round (if not yet finished). */
   recordOutcome(out: RoundOutcome): void {
     const riichiCount = this.round.riichi.filter(Boolean).length;
     this.advance(out, riichiCount);
@@ -62,23 +62,23 @@ export class Hanchan {
   }
 
   /**
-   * Logika murni transisi meta game (dipisah agar mudah diuji).
-   * @param riichiCount jumlah deklarasi riichi pada ronde tsb
+   * Pure game-meta transition logic (separated so it is easy to test).
+   * @param riichiCount number of riichi declarations in that round
    */
   advance(out: RoundOutcome, riichiCount: number): void {
     const pot = this.riichiSticks + riichiCount;
     this.points = out.points.slice();
 
     if (out.type === "draw") {
-      this.riichiSticks = pot; // sticks carry ke ronde berikut
-      this.honba++; // draw selalu menambah honba
+      this.riichiSticks = pot; // sticks carry over to the next round
+      this.honba++; // a draw always increments honba
       const dealerTenpai = out.tenpai?.[this.dealer] ?? false;
       if (!dealerTenpai) this.rotateDealer();
       return;
     }
 
-    // tsumo / ron (ron bisa ganda)
-    const head = out.winner!; // pemenang utama (head-bump): terima honba + sticks
+    // tsumo / ron (ron can be multiple)
+    const head = out.winner!; // primary winner (head-bump): receives honba + sticks
     const winners = out.winners ?? [head];
     if (out.type === "ron") {
       const bonus = 300 * this.honba;
@@ -91,11 +91,11 @@ export class Hanchan {
         this.points[head] += 100 * this.honba;
       }
     }
-    this.points[head] += pot * 1000; // kumpulkan semua riichi sticks
+    this.points[head] += pot * 1000; // collect all riichi sticks
     this.riichiSticks = 0;
 
     if (winners.includes(this.dealer)) {
-      this.honba++; // renchan: dealer termasuk pemenang
+      this.honba++; // renchan: dealer is among the winners
     } else {
       this.honba = 0;
       this.rotateDealer();
@@ -112,7 +112,7 @@ export class Hanchan {
         this.roundWind = SOUTH;
         this.kyokuNum = 1;
       } else {
-        this.finished = true; // selesai setelah South-4
+        this.finished = true; // finished after South-4
       }
     }
   }
@@ -129,14 +129,14 @@ export class Hanchan {
     };
   }
 
-  /** Ranking final seat 1..4 (poin desc; seri dipecah urutan seat awal E>S>W>N). */
+  /** Final ranking of seats 1..4 (points desc; ties broken by initial seat order E>S>W>N). */
   finalRanking(): number[] {
     const seats = [0, 1, 2, 3];
     seats.sort((a, b) => (this.points[b] !== this.points[a] ? this.points[b] - this.points[a] : a - b));
     return seats;
   }
 
-  /** Serialisasi seluruh state game (meta + ronde live) untuk disimpan ke DB. */
+  /** Serialize the entire game state (meta + live round) to be saved to the DB. */
   snapshot(): HanchanSnapshot {
     return {
       points: this.points,
@@ -153,7 +153,7 @@ export class Hanchan {
     };
   }
 
-  /** Rekonstruksi Hanchan dari snapshot (tanpa memanggil constructor). */
+  /** Reconstruct a Hanchan from a snapshot (without calling the constructor). */
   static restore(s: HanchanSnapshot): Hanchan {
     const h = Object.create(Hanchan.prototype) as Hanchan;
     h.points = s.points;

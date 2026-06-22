@@ -1,13 +1,13 @@
 /**
- * Deteksi tangan menang (agari) Riichi.
+ * Riichi winning hand (agari) detection.
  *
- * Tiga bentuk kemenangan:
- *   1. Standar : 4 set (urutan/triplet) + 1 pasangan.
- *   2. Chiitoitsu : 7 pasangan berbeda.
- *   3. Kokushi musou : ke-13 jenis terminal/honor + 1 duplikat.
+ * Three winning shapes:
+ *   1. Standard : 4 sets (sequence/triplet) + 1 pair.
+ *   2. Chiitoitsu : 7 distinct pairs.
+ *   3. Kokushi musou : all 13 terminal/honor kinds + 1 duplicate.
  *
- * Mengembalikan SEMUA dekomposisi standar yang mungkin (penting karena satu tangan
- * bisa ditafsir beberapa cara; scoring memilih yang paling tinggi).
+ * Returns ALL possible standard decompositions (important because one hand
+ * can be interpreted multiple ways; scoring picks the highest).
  */
 import { NUM_KINDS, isYaochuu } from "./tiles";
 
@@ -15,21 +15,21 @@ export type MeldType = "sequence" | "triplet" | "pair" | "kan";
 
 export interface Meld {
   type: MeldType;
-  /** untuk sequence: kind terendah; selain itu kind ubin */
+  /** for sequence: the lowest kind; otherwise the tile kind */
   kind: number;
-  /** apakah meld terbuka (hasil call pon/chi/kan) */
+  /** whether the meld is open (result of a pon/chi/kan call) */
   open?: boolean;
 }
 
 export interface Decomposition {
-  melds: Meld[]; // panjang = neededMelds (tidak termasuk pasangan)
-  pair: number; // kind pasangan
+  melds: Meld[]; // length = neededMelds (does not include the pair)
+  pair: number; // pair kind
 }
 
-/** Enumerasi semua cara memecah `counts` menjadi set (tanpa pasangan). */
+/** Enumerate all ways to break `counts` into sets (without the pair). */
 function decomposeMelds(counts: number[]): Meld[][] {
   const i = counts.findIndex((c) => c > 0);
-  if (i === -1) return [[]]; // habis -> satu cara (kosong)
+  if (i === -1) return [[]]; // exhausted -> one way (empty)
 
   const results: Meld[][] = [];
 
@@ -42,7 +42,7 @@ function decomposeMelds(counts: number[]): Meld[][] {
     counts[i] += 3;
   }
 
-  // sequence (hanya suit angka, dan i bukan dua kind terakhir dalam suit)
+  // sequence (numbered suits only, and i is not the last two kinds within the suit)
   if (i < 27 && i % 9 <= 6 && counts[i + 1] > 0 && counts[i + 2] > 0) {
     counts[i]--;
     counts[i + 1]--;
@@ -58,7 +58,7 @@ function decomposeMelds(counts: number[]): Meld[][] {
   return results;
 }
 
-/** Semua dekomposisi standar (4 set + pasangan) untuk tangan tertutup `counts`. */
+/** All standard decompositions (4 sets + pair) for the concealed hand `counts`. */
 export function standardDecompositions(counts: number[]): Decomposition[] {
   const total = counts.reduce((a, b) => a + b, 0);
   if (total % 3 !== 2) return [];
@@ -79,23 +79,23 @@ export function standardDecompositions(counts: number[]): Decomposition[] {
   return out;
 }
 
-/** Apakah `counts` = 7 pasangan berbeda (chiitoitsu)? */
+/** Is `counts` = 7 distinct pairs (chiitoitsu)? */
 export function isChiitoitsu(counts: number[]): boolean {
   let pairs = 0;
   for (const c of counts) {
     if (c === 2) pairs++;
-    else if (c !== 0) return false; // chiitoi tidak boleh ada triplet/single
+    else if (c !== 0) return false; // chiitoi cannot contain a triplet/single
   }
   return pairs === 7;
 }
 
-/** Apakah `counts` = kokushi musou (13 yatim)? */
+/** Is `counts` = kokushi musou (thirteen orphans)? */
 export function isKokushi(counts: number[]): boolean {
   let hasPair = false;
   let kinds = 0;
   for (let k = 0; k < NUM_KINDS; k++) {
     if (counts[k] === 0) continue;
-    if (!isYaochuu(k)) return false; // hanya terminal/honor
+    if (!isYaochuu(k)) return false; // terminals/honors only
     kinds++;
     if (counts[k] === 2) hasPair = true;
     else if (counts[k] !== 1) return false;
@@ -103,7 +103,7 @@ export function isKokushi(counts: number[]): boolean {
   return kinds === 13 && hasPair;
 }
 
-/** Perluas sebuah meld menjadi daftar kind ubinnya. */
+/** Expand a meld into the list of its tile kinds. */
 export function expandMeld(m: Meld): number[] {
   if (m.type === "sequence") return [m.kind, m.kind + 1, m.kind + 2];
   if (m.type === "kan") return [m.kind, m.kind, m.kind, m.kind];
@@ -111,9 +111,9 @@ export function expandMeld(m: Meld): number[] {
 }
 
 /**
- * Semua dekomposisi menang dengan meld tetap (hasil call/kan) digabungkan.
- * `concealed` = counts ubin tertutup (termasuk ubin penyelesai). Setiap kan/meld
- * mengisi satu "slot" dari 4 set; sisanya dipecah dari tangan tertutup.
+ * All winning decompositions with the fixed melds (call/kan results) merged in.
+ * `concealed` = counts of concealed tiles (including the winning tile). Each kan/meld
+ * fills one "slot" of the 4 sets; the rest are broken out of the concealed hand.
  */
 export function winningDecompositions(concealed: number[], fixedMelds: Meld[]): Decomposition[] {
   const needed = 4 - fixedMelds.length;
@@ -135,7 +135,7 @@ export function winningDecompositions(concealed: number[], fixedMelds: Meld[]): 
   return out;
 }
 
-/** Daftar kind penunggu (waits) untuk tangan tertutup + meld tetap. Kosong = bukan tenpai. */
+/** List of waiting kinds (waits) for the concealed hand + fixed melds. Empty = not tenpai. */
 export function tenpaiWaits(concealed: number[], fixedMelds: Meld[]): number[] {
   const needed = 4 - fixedMelds.length;
   const total = concealed.reduce((a, b) => a + b, 0);
@@ -150,7 +150,7 @@ export function tenpaiWaits(concealed: number[], fixedMelds: Meld[]): number[] {
     }
   }
 
-  // chiitoi/kokushi hanya berlaku untuk tangan tanpa meld terbuka
+  // chiitoi/kokushi only apply to hands without open melds
   if (fixedMelds.length === 0 && total === 13) {
     for (let k = 0; k < NUM_KINDS; k++) {
       if (concealed[k] >= 4 || result.includes(k)) continue;
@@ -170,7 +170,7 @@ export interface AgariResult {
   kokushi: boolean;
 }
 
-/** Cek kemenangan untuk tangan tertutup 14-ubin (sebagai counts 34-elemen). */
+/** Check for a win on a concealed 14-tile hand (as 34-element counts). */
 export function checkAgari(counts: number[]): AgariResult {
   const standard = standardDecompositions(counts);
   const chiitoitsu = isChiitoitsu(counts);
@@ -184,8 +184,8 @@ export function checkAgari(counts: number[]): AgariResult {
 }
 
 /**
- * Apakah `counts` (13 ubin) dalam keadaan tenpai (siap menang)?
- * Mengembalikan daftar kind ubin penunggu (waits). Kosong = bukan tenpai.
+ * Is `counts` (13 tiles) in tenpai (ready to win)?
+ * Returns the list of waiting tile kinds (waits). Empty = not tenpai.
  */
 export function waits(counts: number[]): number[] {
   const total = counts.reduce((a, b) => a + b, 0);

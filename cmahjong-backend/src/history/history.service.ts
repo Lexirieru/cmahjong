@@ -3,12 +3,12 @@ import { PrismaService } from "../prisma/prisma.service";
 import { HanchanLength } from "../game/hanchan";
 import { ReplayMove, replayStates } from "../game/replay";
 
-/** Riwayat & data replay game dari Postgres. */
+/** Game history & replay data from Postgres. */
 @Injectable()
 export class HistoryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Daftar game terbaru. */
+  /** List the most recent games. */
   async listGames(limit = 20) {
     const games = await this.prisma.gameTable.findMany({
       orderBy: { createdAt: "desc" },
@@ -27,8 +27,8 @@ export class HistoryService {
   }
 
   /**
-   * Tape replay deterministik: seed + pemain + daftar aksi terurut.
-   * Klien/util dapat memulai engine dari seed lalu menerapkan tiap aksi.
+   * Deterministic replay tape: seed + players + ordered list of actions.
+   * Clients/utilities can start the engine from the seed then apply each action.
    */
   async getReplay(chainGameId: string) {
     const game = await this.prisma.gameTable.findUnique({
@@ -38,7 +38,7 @@ export class HistoryService {
         moves: { orderBy: { seq: "asc" } },
       },
     });
-    if (!game) throw new NotFoundException(`game ${chainGameId} tidak ditemukan`);
+    if (!game) throw new NotFoundException(`game ${chainGameId} not found`);
     return {
       gameId: game.chainGameId,
       status: game.status,
@@ -55,10 +55,10 @@ export class HistoryService {
     };
   }
 
-  /** Board state + tangan di tiap langkah (untuk UI replay). */
+  /** Board state + hands at each step (for the replay UI). */
   async getReplayStates(chainGameId: string) {
     const tape = await this.getReplay(chainGameId);
-    if (!tape.seed) throw new NotFoundException("game belum punya seed (belum dimulai)");
+    if (!tape.seed) throw new NotFoundException("game has no seed yet (not started)");
     const moves = tape.moves as unknown as ReplayMove[];
     const { frames, result } = replayStates({
       seed: tape.seed,

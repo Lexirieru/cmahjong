@@ -1,63 +1,63 @@
-# cMahjong — Backend (Game Engine Riichi)
+# cMahjong — Backend (Riichi Game Engine)
 
-Engine Mahjong **Riichi** offchain + jembatan ke kontrak escrow Celo. Blockchain
-hanya kasir + notaris (escrow, seed fairness, settlement); seluruh logika permainan
-ada di sini.
+Offchain **Riichi** Mahjong engine + bridge to the Celo escrow contract. The blockchain
+is only the cashier + notary (escrow, seed fairness, settlement); all game logic
+lives here.
 
 Stack: **NestJS + Socket.IO + Prisma/Postgres + ethers v6**.
 
-## Arsitektur
+## Architecture
 
 ```
 src/
-  engine/        Engine Riichi murni (framework-agnostic, teruji)
-    tiles.ts       136 ubin, 34 kind, util
-    wall.ts        shuffle DETERMINISTIK dari seed on-chain (provably fair)
-    deal.ts        pembagian 13×4 + dead wall + dora
-    agari.ts       deteksi menang: standar / chiitoitsu / kokushi + tenpai/waits
-    yaku.ts        deteksi yaku (umum + yakuman utama)
-    score.ts       fu/han -> poin (tabel mangan+), pilih interpretasi terbaik
-  chain/         Integrasi Celo
-    seed.ts        commit/seed mirror kontrak (keccak256 abi.encodePacked)
-    signer.ts      EIP-712 GameResult (untuk settleByServer)
-    chain.service  baca game on-chain + tandatangan server
+  engine/        Pure Riichi engine (framework-agnostic, tested)
+    tiles.ts       136 tiles, 34 kinds, utils
+    wall.ts        DETERMINISTIC shuffle from the on-chain seed (provably fair)
+    deal.ts        13×4 deal + dead wall + dora
+    agari.ts       win detection: standard / chiitoitsu / kokushi + tenpai/waits
+    yaku.ts        yaku detection (common + main yakuman)
+    score.ts       fu/han -> points (mangan+ table), pick the best interpretation
+  chain/         Celo integration
+    seed.ts        commit/seed mirroring the contract (keccak256 abi.encodePacked)
+    signer.ts      EIP-712 GameResult (for settleByServer)
+    chain.service  read on-chain game + server signature
   game/          State machine + realtime
-    round.ts       mekanik 1 ronde: draw/discard, call berprioritas (ron>pon/kan>chi),
+    round.ts       single-round mechanics: draw/discard, prioritized calls (ron>pon/kan>chi),
                    ankan/shouminkan, riichi/double-riichi, ippatsu, furiten,
                    tsumo/ron/exhaustive draw + noten payment
-    hanchan.ts     orkestrasi multi-ronde: rotasi dealer, wind East→South,
-                   honba, riichi sticks, renchan, ranking final
-    game.service   manajer room (in-memory) + finalisasi ranking & sign
-    game.gateway   WebSocket (Socket.IO) event meja
-  settlement/    Pencairan on-chain
-    settlement.service  kumpul tanda tangan pemain -> settle / fallback server
+    hanchan.ts     multi-round orchestration: dealer rotation, wind East→South,
+                   honba, riichi sticks, renchan, final ranking
+    game.service   room manager (in-memory) + ranking finalization & signing
+    game.gateway   WebSocket (Socket.IO) table events
+  settlement/    On-chain payout
+    settlement.service  collect player signatures -> settle / server fallback
     settlement.controller  REST: status, submit sig, typed-data, server-fallback
-  prisma/        PrismaService (mirror metadata game ke Postgres)
+  prisma/        PrismaService (mirror game metadata to Postgres)
 ```
 
-### Alur settle (loop duit penuh)
-1. Hanchan selesai → backend hitung **ranking final** & buka sesi settle
-   (event WS `settleReady`, atau `GET /settlement/:id`).
-2. Klien ambil payload EIP-712 (`GET /settlement/:id/typed-data`), tiap pemain
-   `signTypedData`, lalu kirim via WS `submitSignature` atau
+### Settle flow (full money loop)
+1. Hanchan finishes → backend computes the **final ranking** & opens a settle session
+   (WS event `settleReady`, or `GET /settlement/:id`).
+2. Clients fetch the EIP-712 payload (`GET /settlement/:id/typed-data`), each player
+   `signTypedData`, then sends it via WS `submitSignature` or
    `POST /settlement/:id/signature`.
-3. Saat **4 tanda tangan** terkumpul → backend submit `settle` kooperatif on-chain
-   (server bayar gas, siapa pun boleh memanggil).
-4. Bila ada yang menolak TTD sampai `settleDeadline` → `POST /settlement/:id/server-fallback`
-   memicu `settleByServer` (server attest; kontrak menegakkan deadline).
-5. Hadiah dikreditkan di kontrak → pemenang `withdraw`.
+3. When **4 signatures** are collected → backend submits the cooperative `settle` on-chain
+   (server pays gas, anyone may call it).
+4. If someone refuses to sign by `settleDeadline` → `POST /settlement/:id/server-fallback`
+   triggers `settleByServer` (server attests; the contract enforces the deadline).
+5. Rewards are credited in the contract → winners `withdraw`.
 
 ### Provably fair
-Seed = `keccak256(secret0..3)` dari commit–reveal on-chain. `wall.ts` mengocok tembok
-secara deterministik dari seed itu (Fisher–Yates berbasis keccak256), sehingga siapa
-pun bisa menghitung ulang tembok dari seed publik dan memverifikasi server tak curang.
-Kerahasiaan tangan dijaga karena hanya pemilik seat yang menerima event `hand`.
+Seed = `keccak256(secret0..3)` from the on-chain commit–reveal. `wall.ts` shuffles the wall
+deterministically from that seed (keccak256-based Fisher–Yates), so anyone can recompute
+the wall from the public seed and verify the server didn't cheat. Hand secrecy is preserved
+because only the seat owner receives the `hand` event.
 
-## Menjalankan
+## Running
 
 ```bash
 npm install
-cp .env.example .env        # isi SERVER_PRIVATE_KEY (= game.server on-chain)
+cp .env.example .env        # set SERVER_PRIVATE_KEY (= game.server on-chain)
 npm run db:up               # Postgres via Docker
 npm run prisma:generate
 npm run prisma:migrate
@@ -67,33 +67,31 @@ npm run start:dev           # http://localhost:3001 (WebSocket Socket.IO)
 ## Test
 
 ```bash
-npm test            # seluruh test (engine + ronde + chain)
-npm run test:engine # hanya engine
+npm test            # all tests (engine + round + chain)
+npm run test:engine # engine only
 ```
 
 ## Status & roadmap
 
-Sudah jalan & teruji (55 test):
-- Engine deterministik, agari (3 bentuk), yaku inti + yakuman, scoring fu/han
-- Scoring dengan **meld terbuka & kan**, **dora + kan-dora + uradora** (ura hanya saat riichi)
-- Mekanik ronde lengkap: **call pon/chi/daiminkan**, **ankan/shouminkan** (+rinshan/kan-dora),
-  riichi + **double riichi**, **ippatsu**, **furiten** (permanen/sementara/riichi),
+Working & tested (74 tests):
+- Deterministic engine, agari (3 forms), core yaku + yakuman, fu/han scoring
+- Scoring with **open melds & kan**, **dora + kan-dora + uradora** (ura only on riichi)
+- Complete round mechanics: **pon/chi/daiminkan calls**, **ankan/shouminkan** (+rinshan/kan-dora),
+  riichi + **double riichi**, **ippatsu**, **furiten** (permanent/temporary/riichi),
   **chankan** (rob the kan), tsumo, ron, exhaustive draw + **noten payment**
-- **Prioritas call** (ron > pon/kan > chi) + **multi-ron** (double/triple ron) via
-  pengumpulan respons pemain + head-bump
-- **Hanchan** multi-ronde: rotasi dealer, East→South, **honba**, **riichi sticks**,
-  renchan (dealer menang/tenpai), ranking final
-- commit/seed mirror kontrak, EIP-712 signer, gateway WS, skema Postgres
+- **Call priority** (ron > pon/kan > chi) + **multi-ron** (double/triple ron) via
+  collecting player responses + head-bump
+- **Hanchan** multi-round: dealer rotation, East→South, **honba**, **riichi sticks**,
+  renchan (dealer wins/tenpai), final ranking
+- commit/seed mirroring the contract, EIP-712 signer, WS gateway, Postgres schema
 
-- **Settle on-chain**: kumpul tanda tangan pemain → `settle` kooperatif, atau
-  `settleByServer` fallback; ekspos EIP-712 typed-data + REST/WS endpoint
-- **Persist Postgres**: lifecycle + hasil + **snapshot live** (resume setelah
-  restart) + **log Move per aksi** untuk replay. `replayGame(seed, moves)`
-  mereproduksi game persis (teruji e2e: 347 aksi → state akhir identik).
-  Endpoint: `GET /games`, `GET /games/:id/replay` (tape seed + aksi terurut).
+- **On-chain settle**: collect player signatures → cooperative `settle`, or
+  `settleByServer` fallback; expose EIP-712 typed-data + REST/WS endpoints
+- **Postgres persistence**: lifecycle + results + **live snapshot** (resume after
+  restart) + **per-action Move log** for replay. `replayGame(seed, moves)`
+  reproduces the game exactly (e2e tested: 347 actions → identical final state).
+  Endpoints: `GET /games`, `GET /games/:id/replay` (seed tape + ordered actions).
 
-TODO lanjutan:
-- Auth pemain di gateway (verifikasi tanda tangan wallet)
-- UI replay/history di frontend
-- Auth pemain (verifikasi tanda tangan wallet) di gateway
-- Frontend MiniPay
+Further TODO:
+- Player auth at the gateway (verify wallet signature)
+- MiniPay frontend

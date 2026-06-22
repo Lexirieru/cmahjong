@@ -1,9 +1,9 @@
 /**
- * Penandatangan EIP-712 untuk hasil game — dipakai server saat `settleByServer`
- * (fallback anti rage-quit) dan untuk membantu klien membentuk digest `settle`.
+ * EIP-712 signer for game results — used by the server during `settleByServer`
+ * (anti rage-quit fallback) and to help the client build the `settle` digest.
  *
- * Harus cocok dengan domain & typehash di kontrak:
- *   domain  = EIP712("cMahjong", "1") di alamat kontrak, chainId Celo
+ * Must match the domain & typehash in the contract:
+ *   domain  = EIP712("cMahjong", "1") at the contract address, Celo chainId
  *   struct  = GameResult(uint256 gameId, bytes32 rankingHash)
  *   rankingHash = keccak256(abi.encodePacked(address[4] ranking))
  */
@@ -23,18 +23,18 @@ export function domain(contract: string, chainId: number): TypedDataDomain {
 /**
  * rankingHash = keccak256(abi.encodePacked(address[4] ranking)).
  *
- * PENTING: di Solidity, `abi.encodePacked` pada array fixed (address[4]) MEM-PAD
- * tiap elemen ke 32 byte — BUKAN 20 byte seperti address tunggal. Jadi tipe yang
- * benar di sini adalah "address[4]" (terverifikasi cocok dengan resultDigest on-chain),
- * bukan empat "address" terpisah. Salah satu ini menyebabkan revert NotAPlayer.
+ * IMPORTANT: in Solidity, `abi.encodePacked` on a fixed array (address[4]) PADS
+ * each element to 32 bytes — NOT 20 bytes like a single address. So the correct
+ * type here is "address[4]" (verified to match the on-chain resultDigest), not four
+ * separate "address" values. Getting this wrong causes a NotAPlayer revert.
  */
 export function rankingHash(ranking: [string, string, string, string]): string {
   return solidityPackedKeccak256(["address[4]"], [ranking]);
 }
 
 /**
- * Payload EIP-712 lengkap (domain + types + value) yang harus ditandatangani klien
- * (mis. via `wallet.signTypedData` / wagmi `signTypedData`).
+ * Complete EIP-712 payload (domain + types + value) that the client must sign
+ * (e.g. via `wallet.signTypedData` / wagmi `signTypedData`).
  */
 export function resultTypedData(
   contract: string,
@@ -51,8 +51,8 @@ export function resultTypedData(
 }
 
 /**
- * Tanda tangani hasil game sebagai server (untuk settleByServer).
- * @returns signature 65-byte (0x...)
+ * Sign the game result as the server (for settleByServer).
+ * @returns 65-byte signature (0x...)
  */
 export async function signResult(
   serverWallet: Wallet,
@@ -68,8 +68,8 @@ export async function signResult(
 }
 
 /**
- * Pulihkan alamat penanda tangan dari sebuah signature hasil game (EIP-712).
- * Dipakai backend untuk memverifikasi tanda tangan pemain sebelum submit `settle`.
+ * Recover the signer address from a game-result signature (EIP-712).
+ * Used by the backend to verify a player's signature before submitting `settle`.
  */
 export function recoverResultSigner(
   contract: string,
@@ -86,7 +86,7 @@ export function recoverResultSigner(
   );
 }
 
-/** Apakah `signature` benar-benar dari `expected` atas hasil game ini? */
+/** Is `signature` truly from `expected` over this game result? */
 export function verifyResult(
   contract: string,
   chainId: number,

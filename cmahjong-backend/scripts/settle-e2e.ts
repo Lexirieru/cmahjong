@@ -1,11 +1,11 @@
 /**
- * Test end-to-end alur settle di Celo mainnet (nominal kecil, CELO native).
+ * End-to-end test of the settle flow on Celo mainnet (tiny amount, native CELO).
  *
- *   createGame -> 4x joinGame+commit -> 4x revealSeed -> settle (4 TTD pemain)
- *   -> cek credit -> withdraw pemenang.
+ *   createGame -> 4x joinGame+commit -> 4x revealSeed -> settle (4 player signatures)
+ *   -> check credit -> withdraw winner.
  *
- * Memakai langsung src/chain/signer.ts (membuktikan tanda tangan backend cocok
- * dengan kontrak). Jalankan:
+ * Uses src/chain/signer.ts directly (proving the backend's signatures match the
+ * contract). Run:
  *   PRIVATE_KEY=0x.. CELO_RPC=https://forno.celo.org \
  *   npx ts-node scripts/settle-e2e.ts
  */
@@ -25,8 +25,8 @@ import { signResult } from "../src/chain/signer";
 const PROXY = process.env.MAHJONG_ADDRESS ?? "0xBEE2D162aD3f3de655A74Bf5E79F37bb96aE0EC4";
 const NATIVE = "0x0000000000000000000000000000000000000000";
 const CHAIN_ID = 42220;
-const BUY_IN = parseEther("0.001"); // mungil
-const FUND = parseEther("0.09"); // buyIn + gas untuk tiap pemain
+const BUY_IN = parseEther("0.001"); // tiny
+const FUND = parseEther("0.09"); // buyIn + gas for each player
 
 const ABI = [
   "function createGame(address token,uint256 buyIn,address server,uint16[4] payoutBps,uint64 commitWindow,uint64 revealWindow,uint64 settleWindow) returns (uint256)",
@@ -47,18 +47,18 @@ function commitmentOf(gameId: bigint, player: string, secret: string): string {
 async function main() {
   const rpc = process.env.CELO_RPC ?? "https://forno.celo.org";
   const pk = process.env.PRIVATE_KEY;
-  if (!pk) throw new Error("PRIVATE_KEY belum diset");
+  if (!pk) throw new Error("PRIVATE_KEY is not set");
 
   const provider = new JsonRpcProvider(rpc);
   const deployer = new Wallet(pk, provider);
   console.log("Deployer/server:", deployer.address);
-  console.log("Saldo awal:", formatEther(await provider.getBalance(deployer.address)), "CELO\n");
+  console.log("Initial balance:", formatEther(await provider.getBalance(deployer.address)), "CELO\n");
 
   const contract = new Contract(PROXY, ABI, deployer);
 
-  // 1) buat 4 wallet pemain & danai
+  // 1) create 4 player wallets & fund them
   const players = [0, 1, 2, 3].map(() => Wallet.createRandom().connect(provider));
-  // SIMPAN kunci sebelum mendanai — agar dana bisa dipulihkan bila script crash
+  // SAVE the keys before funding — so funds can be recovered if the script crashes
   const keyFile = `${__dirname}/.e2e-wallets.json`;
   writeFileSync(
     keyFile,
@@ -68,15 +68,15 @@ async function main() {
       2,
     ),
   );
-  console.log("Kunci pemain disimpan di", keyFile, "(recovery)\n");
-  console.log("Mendanai 4 pemain...");
+  console.log("Player keys saved to", keyFile, "(recovery)\n");
+  console.log("Funding 4 players...");
   for (const p of players) {
     const tx = await deployer.sendTransaction({ to: p.address, value: FUND });
     await tx.wait();
   }
   console.log("  done.\n");
 
-  // 2) createGame (native, buy-in mungil)
+  // 2) createGame (native, tiny buy-in)
   console.log("createGame...");
   const payout: [number, number, number, number] = [5000, 3000, 1500, 500];
   const txC = await contract.createGame(NATIVE, BUY_IN, deployer.address, payout, 3600, 3600, 3600);
@@ -86,7 +86,7 @@ async function main() {
 
   // 3) join + commit
   const secrets = players.map(() => hexlify(randomBytes(32)));
-  console.log("joinGame + commit (4 pemain)...");
+  console.log("joinGame + commit (4 players)...");
   for (let i = 0; i < 4; i++) {
     const c = commitmentOf(gameId, players[i].address, secrets[i]);
     const tx = await (contract.connect(players[i]) as Contract).joinGame(gameId, c, { value: BUY_IN });
@@ -95,7 +95,7 @@ async function main() {
   }
 
   // 4) reveal
-  console.log("\nrevealSeed (4 pemain)...");
+  console.log("\nrevealSeed (4 players)...");
   for (let i = 0; i < 4; i++) {
     const tx = await (contract.connect(players[i]) as Contract).revealSeed(gameId, secrets[i]);
     await tx.wait();
@@ -103,21 +103,21 @@ async function main() {
   const seed: string = await contract.getSeed(gameId);
   console.log("  seed on-chain:", seed, "\n");
 
-  // 5) ranking final + 4 tanda tangan EIP-712 (pakai signer backend)
+  // 5) final ranking + 4 EIP-712 signatures (using the backend signer)
   const ranking = players.map((p) => p.address) as [string, string, string, string];
-  console.log("Tanda tangan ranking (juara 1..4):", ranking);
+  console.log("Signing ranking (1st..4th):", ranking);
   const sigs = (await Promise.all(
     players.map((p) => signResult(p as unknown as Wallet, PROXY, CHAIN_ID, gameId, ranking)),
   )) as [string, string, string, string];
 
-  // 6) settle kooperatif (deployer submit, bayar gas)
-  console.log("\nsettle (kooperatif, 4 sig)...");
+  // 6) cooperative settle (deployer submits, pays the gas)
+  console.log("\nsettle (cooperative, 4 sigs)...");
   const txS = await contract.settle(gameId, ranking, sigs);
   await txS.wait();
   console.log("  settle tx:", txS.hash, "\n");
 
-  // 7) cek credit hasil payout
-  console.log("Credit hasil (native):");
+  // 7) check the resulting payout credit
+  console.log("Resulting credit (native):");
   for (let i = 0; i < 4; i++) {
     const c: bigint = await contract.creditOf(NATIVE, players[i].address);
     console.log(`  seat ${i} (rank ${i + 1}): ${formatEther(c)} CELO`);
@@ -125,17 +125,17 @@ async function main() {
   const houseCredit: bigint = await contract.creditOf(NATIVE, deployer.address);
   console.log(`  house (rake): ${formatEther(houseCredit)} CELO`);
 
-  // 8) withdraw pemenang
-  console.log("\nwithdraw pemenang (seat 0)...");
+  // 8) withdraw winner
+  console.log("\nwithdraw winner (seat 0)...");
   const balBefore = await provider.getBalance(players[0].address);
   const txW = await (contract.connect(players[0]) as Contract).withdraw(NATIVE);
   const rcptW = await txW.wait();
   const balAfter = await provider.getBalance(players[0].address);
   console.log("  withdraw tx:", txW.hash);
-  console.log("  saldo seat0:", formatEther(balBefore), "->", formatEther(balAfter), "CELO");
+  console.log("  seat0 balance:", formatEther(balBefore), "->", formatEther(balAfter), "CELO");
 
-  // 9) sweep sisa saldo pemain kembali ke deployer (best-effort)
-  console.log("\nSweep sisa saldo pemain -> deployer...");
+  // 9) sweep remaining player balances back to the deployer (best-effort)
+  console.log("\nSweep remaining player balances -> deployer...");
   const feeData = await provider.getFeeData();
   const gasP = feeData.gasPrice ?? 0n;
   for (const p of players) {
@@ -147,15 +147,15 @@ async function main() {
         await tx.wait();
       }
     } catch {
-      /* abaikan dust */
+      /* ignore dust */
     }
   }
 
-  console.log("\nSaldo deployer akhir:", formatEther(await provider.getBalance(deployer.address)), "CELO");
-  console.log("\n✅ E2E SETTLE BERHASIL");
+  console.log("\nFinal deployer balance:", formatEther(await provider.getBalance(deployer.address)), "CELO");
+  console.log("\n✅ E2E SETTLE SUCCEEDED");
 }
 
 main().catch((e) => {
-  console.error("❌ GAGAL:", e);
+  console.error("❌ FAILED:", e);
   process.exit(1);
 });

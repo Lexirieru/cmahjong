@@ -1,5 +1,5 @@
-// Skema Postgres untuk cMahjong backend.
-// Menyimpan mirror game on-chain + commit/reveal + log ronde.
+// Postgres schema for the cMahjong backend.
+// Stores an on-chain game mirror + commit/reveal + round log.
 
 generator client {
   provider = "prisma-client-js"
@@ -11,26 +11,26 @@ datasource db {
 }
 
 enum TableStatus {
-  OPEN // menunggu pemain + commit
-  REVEALING // menunggu reveal
-  PLAYING // game berjalan
-  SETTLED // sudah settle on-chain
+  OPEN // waiting for players + commit
+  REVEALING // waiting for reveal
+  PLAYING // game in progress
+  SETTLED // already settled on-chain
   CANCELLED
 }
 
-/// Mirror sebuah game di kontrak MahjongTable (per gameId on-chain).
+/// Mirror of a game in the MahjongTable contract (per on-chain gameId).
 model GameTable {
   id            String      @id @default(cuid())
-  chainGameId   String      @unique // gameId on-chain (uint256 sebagai string)
-  token         String // alamat token buy-in (0x0 = CELO native)
-  buyIn         String // satuan terkecil token (string untuk presisi)
-  server        String // alamat server/operator
+  chainGameId   String      @unique // on-chain gameId (uint256 as a string)
+  token         String // buy-in token address (0x0 = CELO native)
+  buyIn         String // smallest token unit (string for precision)
+  server        String // server/operator address
   status        TableStatus @default(OPEN)
   length        String      @default("hanchan") // "east" | "hanchan"
-  seed          String? // seed kolektif setelah reveal lengkap
-  liveState     Json? // snapshot Hanchan/Round live (untuk resume setelah restart)
-  finalRanking  String[] // alamat juara 1..4 saat settle
-  serverSig     String? // tanda tangan server (settleByServer)
+  seed          String? // collective seed after full reveal
+  liveState     Json? // live Hanchan/Round snapshot (to resume after a restart)
+  finalRanking  String[] // addresses of places 1..4 at settle time
+  serverSig     String? // server signature (settleByServer)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -38,13 +38,13 @@ model GameTable {
   moves Move[]
 }
 
-/// Satu kursi (seat) pemain di sebuah meja.
+/// A single player seat at a table.
 model Seat {
   id         String  @id @default(cuid())
   table      GameTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
   tableId    String
-  seatIndex  Int // 0..3 (urutan join = E,S,W,N relatif dealer)
-  address    String // alamat wallet pemain
+  seatIndex  Int // 0..3 (join order = E,S,W,N relative to the dealer)
+  address    String // player wallet address
   commitment String? // keccak256(gameId, player, secret)
   revealed   Boolean @default(false)
   finalPoints Int?
@@ -53,12 +53,12 @@ model Seat {
   @@unique([tableId, address])
 }
 
-/// Log tiap aksi (untuk audit & replay langkah-demi-langkah).
+/// Log of every action (for audit & step-by-step replay).
 model Move {
   id        String   @id @default(cuid())
   table     GameTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
   tableId   String
-  seq       Int // urutan dalam game (untuk replay deterministik)
+  seq       Int // order within the game (for deterministic replay)
   seatIndex Int
   kind      String // discard | riichi | tsumo | pon | chi | kan | ron | pass
   payload   Json?

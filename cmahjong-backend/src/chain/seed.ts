@@ -1,25 +1,25 @@
 /**
- * Util commit–reveal yang HARUS sama persis dengan kontrak MahjongTable.
+ * Commit–reveal utilities that MUST match the MahjongTable contract exactly.
  *
- * Kontrak:
+ * Contract:
  *   commitment = keccak256(abi.encodePacked(uint256 gameId, address player, bytes32 secret))
  *   seed       = keccak256(abi.encodePacked(bytes32 s0, bytes32 s1, bytes32 s2, bytes32 s3))
  *
- * Secret diurutkan berdasarkan SEAT (urutan join) 0..3, sama seperti kontrak.
+ * Secrets are ordered by SEAT (join order) 0..3, just like the contract.
  */
 import { randomBytes, solidityPackedKeccak256, hexlify } from "ethers";
 
-/** Hasilkan secret acak 32-byte (hex 0x...). */
+/** Generate a random 32-byte secret (hex 0x...). */
 export function randomSecret(): string {
   return hexlify(randomBytes(32));
 }
 
-/** Hitung commitment untuk join (mirror kontrak). */
+/** Compute the commitment for join (mirrors the contract). */
 export function commitmentOf(gameId: bigint | number, player: string, secret: string): string {
   return solidityPackedKeccak256(["uint256", "address", "bytes32"], [gameId, player, secret]);
 }
 
-/** Hitung seed kolektif dari 4 secret terurut seat (mirror kontrak). */
+/** Compute the collective seed from 4 seat-ordered secrets (mirrors the contract). */
 export function computeSeed(secrets: [string, string, string, string]): string {
   return solidityPackedKeccak256(
     ["bytes32", "bytes32", "bytes32", "bytes32"],
@@ -27,7 +27,7 @@ export function computeSeed(secrets: [string, string, string, string]): string {
   );
 }
 
-/** Verifikasi sebuah reveal cocok dengan commitment yang tersimpan. */
+/** Verify that a reveal matches the stored commitment. */
 export function verifyReveal(
   gameId: bigint | number,
   player: string,

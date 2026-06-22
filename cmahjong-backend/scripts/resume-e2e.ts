@@ -1,11 +1,11 @@
 /**
- * E2E RESUME: buktikan game bisa dilanjut setelah backend "restart".
+ * E2E RESUME: prove a game can be continued after the backend "restarts".
  *
- *   1. Boot app A, mulai game, main beberapa giliran (snapshot tersimpan ke DB).
- *   2. Tutup app A (simulasi crash/restart).
- *   3. Boot app B (DB sama) → onModuleInit memuat game PLAYING dari DB.
- *   4. Bandingkan state app B dengan state app A sebelum restart → harus identik.
- *   5. Lanjutkan bermain di app B.
+ *   1. Boot app A, start a game, play several turns (snapshot saved to the DB).
+ *   2. Close app A (simulate a crash/restart).
+ *   3. Boot app B (same DB) → onModuleInit loads the PLAYING game from the DB.
+ *   4. Compare app B's state with app A's state before the restart → must be identical.
+ *   5. Continue playing in app B.
  *
  *   set -a; source .env; set +a; npx ts-node scripts/resume-e2e.ts
  */
@@ -31,7 +31,7 @@ async function boot() {
   return { app, gs: app.get(GameService) };
 }
 
-/** Mainkan satu giliran: buang ubin terakhir; bila ada fase call, pass semua. */
+/** Play one turn: discard the last tile; if there is a call phase, pass on all of them. */
 function step(gs: GameService): "discarded" | "passed" | "ended" {
   const st = gs.publicState(GID);
   if (st.phase === "ended") return "ended";
@@ -49,7 +49,7 @@ function step(gs: GameService): "discarded" | "passed" | "ended" {
 async function main() {
   Logger.overrideLogger(["warn", "error", "log"]);
 
-  // ── App A: mulai + main 6 giliran ──
+  // ── App A: start + play 6 turns ──
   const A = await boot();
   await A.gs.startRound(GID, { seed: SEED, players: PLAYERS, length: "east" });
   let discards = 0;
@@ -59,18 +59,18 @@ async function main() {
   const stateA = A.gs.publicState(GID);
   console.log("App A  → discards/seat:", stateA.discards.map((d) => d.length), "| turn:", stateA.turn);
 
-  // tunggu snapshot tersimpan (coalesced 400ms + tulis DB), lalu "restart"
+  // wait for the snapshot to be saved (coalesced 400ms + DB write), then "restart"
   await new Promise((r) => setTimeout(r, 1500));
   await A.app.close();
-  console.log("— app A ditutup (simulasi restart) —");
+  console.log("— app A closed (simulated restart) —");
 
-  // ── App B: boot dari DB yang sama → harus me-resume game ──
+  // ── App B: boot from the same DB → should resume the game ──
   const B = await boot();
   let stateB;
   try {
     stateB = B.gs.publicState(GID);
   } catch {
-    console.error("❌ Game TIDAK dipulihkan di app B");
+    console.error("❌ Game was NOT restored in app B");
     await B.app.close();
     process.exit(1);
   }
@@ -81,25 +81,25 @@ async function main() {
     stateA.turn === stateB.turn &&
     JSON.stringify(stateA.points) === JSON.stringify(stateB.points);
 
-  // lanjut bermain di app B untuk membuktikan game benar-benar hidup
+  // keep playing in app B to prove the game is really alive
   const before = B.gs.publicState(GID).discards.reduce((a, d) => a + d.length, 0);
   for (let i = 0; i < 3; i++) step(B.gs);
   const after = B.gs.publicState(GID).discards.reduce((a, d) => a + d.length, 0);
   await B.app.close();
 
-  console.log("\n──────── HASIL ────────");
-  console.log("state cocok sebelum/sesudah restart:", match);
-  console.log("bisa lanjut main di app B:", after > before, `(${before} → ${after} buangan)`);
+  console.log("\n──────── RESULT ────────");
+  console.log("state matches before/after restart:", match);
+  console.log("can continue playing in app B:", after > before, `(${before} → ${after} discards)`);
   if (match && after > before) {
-    console.log("\n✅ RESUME SETELAH RESTART BERHASIL");
+    console.log("\n✅ RESUME AFTER RESTART SUCCEEDED");
   } else {
-    console.error("\n❌ RESUME GAGAL");
+    console.error("\n❌ RESUME FAILED");
     process.exit(1);
   }
   process.exit(0);
 }
 
 main().catch((e) => {
-  console.error("❌ GAGAL:", e);
+  console.error("❌ FAILED:", e);
   process.exit(1);
 });

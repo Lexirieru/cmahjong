@@ -1,6 +1,7 @@
 /**
- * E2E REPLAY: main satu game penuh (aksi ter-log ke DB), ambil tape dari DB,
- * lalu replayGame() dari seed+moves — hasilnya harus IDENTIK dengan game asli.
+ * E2E REPLAY: play one full game (actions logged to the DB), fetch the tape from
+ * the DB, then replayGame() from seed+moves — the result must be IDENTICAL to the
+ * original game.
  *
  *   set -a; source .env; set +a; npx ts-node scripts/replay-e2e.ts
  */
@@ -53,12 +54,12 @@ async function main() {
   }
 
   if (!actual) {
-    console.error("❌ game tidak selesai");
+    console.error("❌ game did not finish");
     await app.close();
     process.exit(1);
   }
 
-  await gs.flushMoves(GID); // pastikan seluruh aksi tertulis
+  await gs.flushMoves(GID); // make sure all actions are written
   const tape = await history.getReplay(GID);
   const result = replayGame({
     seed: tape.seed!,
@@ -73,21 +74,21 @@ async function main() {
   const actualRankingAddr = actual.settle!.ranking.map((a) => a.toLowerCase());
   const rankingMatch = JSON.stringify(replayRankingAddr) === JSON.stringify(actualRankingAddr);
 
-  console.log("\n──────── HASIL ────────");
-  console.log("moves tersimpan:", tape.moves.length);
-  console.log("poin asli  :", actualPoints);
-  console.log("poin replay:", result.points);
-  console.log("poin cocok:", pointsMatch, "| ranking cocok:", rankingMatch);
+  console.log("\n──────── RESULT ────────");
+  console.log("moves saved:", tape.moves.length);
+  console.log("original points:", actualPoints);
+  console.log("replay points :", result.points);
+  console.log("points match:", pointsMatch, "| ranking match:", rankingMatch);
 
   if (pointsMatch && rankingMatch && result.finished) {
-    console.log("\n✅ REPLAY MEREPRODUKSI GAME PERSIS DARI SEED + MOVES");
+    console.log("\n✅ REPLAY REPRODUCES THE GAME EXACTLY FROM SEED + MOVES");
     process.exit(0);
   }
-  console.error("\n❌ REPLAY TIDAK COCOK");
+  console.error("\n❌ REPLAY DID NOT MATCH");
   process.exit(1);
 }
 
 main().catch((e) => {
-  console.error("❌ GAGAL:", e);
+  console.error("❌ FAILED:", e);
   process.exit(1);
 });

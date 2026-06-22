@@ -1,7 +1,7 @@
 /**
- * Replay deterministik sebuah game dari tape (seed + length + daftar aksi).
- * Memulai engine dari seed lalu menerapkan tiap aksi berurutan — mereproduksi
- * jalannya game persis (karena tembok deterministik dari seed yang sama).
+ * Deterministic replay of a game from a tape (seed + length + list of actions).
+ * Starts the engine from the seed then applies each action in order — reproducing
+ * the exact course of the game (because the wall is deterministic from the same seed).
  */
 import { Hanchan, HanchanLength } from "./hanchan";
 import { PublicState, RoundOutcome } from "./round";
@@ -26,7 +26,7 @@ export interface ReplayResult {
   ranking: number[];
 }
 
-/** Terapkan satu aksi ke ronde aktif; kembalikan outcome bila aksi mengakhiri ronde. */
+/** Apply a single action to the active round; return the outcome if the action ends the round. */
 function applyMove(hanchan: Hanchan, m: ReplayMove): RoundOutcome | null {
   const r = hanchan.round;
   const p = m.payload ?? {};
@@ -70,13 +70,13 @@ export function replayGame(tape: ReplayTape): ReplayResult {
 
 export interface ReplayFrame {
   seq: number;
-  seat: number; // seat pelaku aksi (-1 untuk frame awal)
-  kind: string; // "deal" untuk frame awal
+  seat: number; // seat performing the action (-1 for the initial frame)
+  kind: string; // "deal" for the initial frame
   state: PublicState;
-  hands: Tile[][]; // tangan keempat seat (replay = terbuka)
+  hands: Tile[][]; // all four seats' hands (replay = open)
 }
 
-/** Replay yang menangkap board state + tangan di tiap langkah (untuk UI). */
+/** Replay that captures the board state + hands at each step (for the UI). */
 export function replayStates(tape: ReplayTape): { frames: ReplayFrame[]; result: ReplayResult } {
   const hanchan = new Hanchan(tape.seed, tape.length);
   const frames: ReplayFrame[] = [];

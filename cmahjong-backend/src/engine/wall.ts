@@ -1,31 +1,31 @@
 /**
- * Pengocokan tembok yang DETERMINISTIK & dapat diverifikasi siapa pun dari seed
- * kolektif on-chain.
+ * DETERMINISTIC wall shuffle, verifiable by anyone from the collective on-chain
+ * seed.
  *
- * Seed berasal dari commit–reveal di kontrak MahjongTable:
+ * The seed comes from the commit–reveal in the MahjongTable contract:
  *   seed = keccak256(abi.encodePacked(secret0, secret1, secret2, secret3))
  *
- * Pengocokan memakai Fisher–Yates dengan PRNG berbasis keccak256, sehingga hasil
- * tembok 100% reproducible: siapa pun yang tahu seed bisa menghitung ulang urutan
- * tembok yang sama persis dan memastikan server tidak curang. Algoritma:
+ * The shuffle uses Fisher–Yates with a keccak256-based PRNG, so the resulting
+ * wall is 100% reproducible: anyone who knows the seed can recompute the exact
+ * same wall order and verify the server is not cheating. Algorithm:
  *
- *   untuk i dari n-1 turun ke 1:
+ *   for i from n-1 down to 1:
  *     j = keccak256(abi.encodePacked(seed, uint256(i))) mod (i + 1)
- *     tukar wall[i] dan wall[j]
+ *     swap wall[i] and wall[j]
  *
- * Karena memakai keccak256 + abi.encodePacked (sama seperti Solidity), algoritma ini
- * dapat ditulis ulang di bahasa/onchain apa pun untuk audit.
+ * Because it uses keccak256 + abi.encodePacked (just like Solidity), this algorithm
+ * can be rewritten in any language/onchain for auditing.
  */
 import { solidityPackedKeccak256 } from "ethers";
 import { Tile, buildWall } from "./tiles";
 
-/** PRNG: kembalikan bilangan acak deterministik ke-`counter` dari seed (sebagai bigint 256-bit). */
+/** PRNG: return the `counter`-th deterministic random number from the seed (as a 256-bit bigint). */
 export function keccakRandom(seed: string, counter: number | bigint): bigint {
   const h = solidityPackedKeccak256(["bytes32", "uint256"], [seed, counter]);
   return BigInt(h);
 }
 
-/** Fisher–Yates deterministik dari seed. Mengembalikan array baru (tidak mengubah input). */
+/** Deterministic Fisher–Yates from a seed. Returns a new array (does not mutate the input). */
 export function deterministicShuffle<T>(seed: string, input: T[]): T[] {
   const arr = input.slice();
   for (let i = arr.length - 1; i >= 1; i--) {
@@ -37,7 +37,7 @@ export function deterministicShuffle<T>(seed: string, input: T[]): T[] {
   return arr;
 }
 
-/** Bangun tembok kanonik lalu kocok dengan seed. */
+/** Build the canonical wall then shuffle it with the seed. */
 export function shuffledWall(seed: string): Tile[] {
   return deterministicShuffle(seed, buildWall());
 }

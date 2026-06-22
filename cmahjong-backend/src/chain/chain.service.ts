@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Contract, JsonRpcProvider, Wallet } from "ethers";
 import { signResult } from "./signer";
 
-/** ABI minimal MahjongTable yang dibutuhkan backend. */
+/** Minimal MahjongTable ABI needed by the backend. */
 const MAHJONG_ABI = [
   "function getGame(uint256) view returns (tuple(address token,uint256 buyIn,address server,uint8 status,uint8 joined,uint8 revealedCount,uint64 commitDeadline,uint64 revealWindow,uint64 settleWindow,uint64 revealDeadline,uint64 settleDeadline,bytes32 seed,uint16[4] payoutBps,address[4] players,bytes32[4] commitments,bytes32[4] secrets,bool[4] revealed))",
   "function getSeed(uint256) view returns (bytes32)",
@@ -12,7 +12,7 @@ const MAHJONG_ABI = [
   "function settleByServer(uint256 gameId, address[4] ranking, bytes serverSig)",
 ];
 
-/** Status game on-chain (selaras enum Status di kontrak). */
+/** On-chain game status (aligned with the Status enum in the contract). */
 export enum ChainStatus {
   None,
   Open,
@@ -33,8 +33,8 @@ export interface ChainGame {
 }
 
 /**
- * Jembatan ke kontrak MahjongTable di Celo: baca state game & tandatangani
- * hasil untuk `settleByServer` (fallback).
+ * Bridge to the MahjongTable contract on Celo: read game state & sign
+ * results for `settleByServer` (fallback).
  */
 @Injectable()
 export class ChainService {
@@ -61,16 +61,16 @@ export class ChainService {
         this.writeContract = new Contract(this.contractAddress, MAHJONG_ABI, this.serverWallet);
       }
     } else {
-      this.logger.warn("MAHJONG_ADDRESS belum diset — interaksi on-chain dinonaktifkan");
+      this.logger.warn("MAHJONG_ADDRESS not set — on-chain interactions disabled");
     }
   }
 
-  /** Alamat server yang dipakai untuk attest (harus = game.server on-chain). */
+  /** Server address used to attest (must = game.server on-chain). */
   get serverAddress(): string | undefined {
     return this.serverWallet?.address;
   }
 
-  /** Alamat kontrak MahjongTable. */
+  /** MahjongTable contract address. */
   get address(): string {
     return this.contractAddress;
   }
@@ -80,14 +80,14 @@ export class ChainService {
     return this.chainId;
   }
 
-  /** Apakah pembacaan on-chain aktif (alamat kontrak terkonfigurasi). */
+  /** Whether on-chain reads are active (contract address configured). */
   get configured(): boolean {
     return !!this.contract;
   }
 
-  /** Baca ringkasan state game on-chain. */
+  /** Read a summary of on-chain game state. */
   async readGame(chainGameId: bigint): Promise<ChainGame> {
-    if (!this.contract) throw new Error("kontrak belum dikonfigurasi");
+    if (!this.contract) throw new Error("contract not configured");
     const g = await this.contract.getGame(chainGameId);
     return {
       token: g.token,
@@ -100,40 +100,40 @@ export class ChainService {
     };
   }
 
-  /** Baca seed kolektif on-chain (sumber kebenaran untuk shuffle). */
+  /** Read the collective seed on-chain (source of truth for the shuffle). */
   async readSeed(chainGameId: bigint): Promise<string> {
-    if (!this.contract) throw new Error("kontrak belum dikonfigurasi");
+    if (!this.contract) throw new Error("contract not configured");
     return this.contract.getSeed(chainGameId);
   }
 
-  /** Baca daftar pemain (urutan seat) on-chain. */
+  /** Read the player list (seat order) on-chain. */
   async readPlayers(chainGameId: bigint): Promise<string[]> {
-    if (!this.contract) throw new Error("kontrak belum dikonfigurasi");
+    if (!this.contract) throw new Error("contract not configured");
     return this.contract.getPlayers(chainGameId);
   }
 
   /**
-   * Tandatangani ranking final sebagai server untuk settleByServer.
-   * @param ranking alamat juara 1..4
+   * Sign the final ranking as the server for settleByServer.
+   * @param ranking addresses of 1st..4th place
    */
   async signRanking(
     chainGameId: bigint,
     ranking: [string, string, string, string],
   ): Promise<string> {
-    if (!this.serverWallet) throw new Error("SERVER_PRIVATE_KEY belum diset");
+    if (!this.serverWallet) throw new Error("SERVER_PRIVATE_KEY not set");
     return signResult(this.serverWallet, this.contractAddress, this.chainId, chainGameId, ranking);
   }
 
   /**
-   * Submit settle KOOPERATIF (4 tanda tangan pemain). Siapa pun boleh memanggil;
-   * server membayar gas. Mengembalikan tx hash setelah dikonfirmasi.
+   * Submit a COOPERATIVE settle (4 player signatures). Anyone may call it;
+   * the server pays gas. Returns the tx hash after confirmation.
    */
   async submitSettle(
     chainGameId: bigint,
     ranking: [string, string, string, string],
     signatures: [string, string, string, string],
   ): Promise<string> {
-    if (!this.writeContract) throw new Error("server wallet/kontrak belum dikonfigurasi");
+    if (!this.writeContract) throw new Error("server wallet/contract not configured");
     const tx = await this.writeContract.settle(chainGameId, ranking, signatures);
     const receipt = await tx.wait();
     this.logger.log(`settle game ${chainGameId} -> ${receipt.hash}`);
@@ -141,15 +141,15 @@ export class ChainService {
   }
 
   /**
-   * Submit settleByServer (fallback). Hanya valid on-chain setelah settleDeadline;
-   * kontrak yang menegakkannya.
+   * Submit settleByServer (fallback). Only valid on-chain after settleDeadline;
+   * the contract enforces it.
    */
   async submitSettleByServer(
     chainGameId: bigint,
     ranking: [string, string, string, string],
     serverSig: string,
   ): Promise<string> {
-    if (!this.writeContract) throw new Error("server wallet/kontrak belum dikonfigurasi");
+    if (!this.writeContract) throw new Error("server wallet/contract not configured");
     const tx = await this.writeContract.settleByServer(chainGameId, ranking, serverSig);
     const receipt = await tx.wait();
     this.logger.log(`settleByServer game ${chainGameId} -> ${receipt.hash}`);

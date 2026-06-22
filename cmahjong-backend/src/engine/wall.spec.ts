@@ -6,29 +6,29 @@ const SEED = "0x" + "ab".repeat(32);
 const SEED2 = "0x" + "cd".repeat(32);
 
 describe("deterministic wall", () => {
-  it("menghasilkan tembok yang sama untuk seed yang sama", () => {
+  it("produces the same wall for the same seed", () => {
     const a = shuffledWall(SEED).map((t) => t.id);
     const b = shuffledWall(SEED).map((t) => t.id);
     expect(a).toEqual(b);
   });
 
-  it("seed berbeda -> urutan berbeda", () => {
+  it("different seed -> different order", () => {
     const a = shuffledWall(SEED).map((t) => t.id);
     const b = shuffledWall(SEED2).map((t) => t.id);
     expect(a).not.toEqual(b);
   });
 
-  it("tetap berisi 136 ubin, 4 tiap kind", () => {
+  it("still contains 136 tiles, 4 of each kind", () => {
     const wall = shuffledWall(SEED);
     expect(wall.length).toBe(136);
     const counts = toCounts(wall);
     expect(counts.every((c) => c === 4)).toBe(true);
-    // semua id 0..135 unik
+    // all ids 0..135 unique
     const ids = new Set(wall.map((t) => t.id));
     expect(ids.size).toBe(136);
   });
 
-  it("shuffle adalah permutasi (tidak menghilangkan elemen)", () => {
+  it("shuffle is a permutation (no elements lost)", () => {
     const arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     const shuffled = deterministicShuffle(SEED, arr);
     expect([...shuffled].sort((x, y) => x - y)).toEqual(arr);
@@ -36,18 +36,18 @@ describe("deterministic wall", () => {
 });
 
 describe("deal", () => {
-  it("membagi 13 ubin ke tiap pemain + sisa live wall benar", () => {
+  it("deals 13 tiles to each player + the remaining live wall is correct", () => {
     const wall = shuffledWall(SEED);
     const { hands, liveWall, deadWall, doraIndicator } = dealFromWall(wall);
     expect(hands).toHaveLength(4);
     hands.forEach((h) => expect(h).toHaveLength(13));
     expect(deadWall).toHaveLength(14);
-    // 136 - 14 dead - 52 dibagikan = 70 tersisa
+    // 136 - 14 dead - 52 dealt = 70 remaining
     expect(liveWall).toHaveLength(70);
     expect(doraIndicator).toBeDefined();
   });
 
-  it("doraFromIndicator memutar dengan benar", () => {
+  it("doraFromIndicator cycles correctly", () => {
     expect(doraFromIndicator(0)).toBe(1); // 1m -> 2m
     expect(doraFromIndicator(8)).toBe(0); // 9m -> 1m
     expect(doraFromIndicator(30)).toBe(27); // N -> E

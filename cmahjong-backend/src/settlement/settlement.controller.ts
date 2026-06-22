@@ -2,10 +2,10 @@ import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import { Settlement, SettlementService } from "./settlement.service";
 
 /**
- * Endpoint HTTP untuk pencairan:
- *   GET  /settlement/:gameId                  -> status sesi settle
- *   POST /settlement/:gameId/signature        -> kirim tanda tangan EIP-712 pemain
- *   POST /settlement/:gameId/server-fallback  -> picu settleByServer (server attest)
+ * HTTP endpoints for settlement:
+ *   GET  /settlement/:gameId                  -> settle session status
+ *   POST /settlement/:gameId/signature        -> submit a player's EIP-712 signature
+ *   POST /settlement/:gameId/server-fallback  -> trigger settleByServer (server attest)
  */
 @Controller("settlement")
 export class SettlementController {
@@ -16,7 +16,7 @@ export class SettlementController {
     return this.settlement.get(gameId);
   }
 
-  /** Payload EIP-712 yang harus ditandatangani pemain (untuk signTypedData di klien). */
+  /** EIP-712 payload that the player must sign (for signTypedData on the client). */
   @Get(":gameId/typed-data")
   typedData(@Param("gameId") gameId: string) {
     return this.settlement.typedData(gameId);

@@ -6,9 +6,9 @@ export type SettlementStatus = "collecting" | "settled" | "failed";
 
 export interface Settlement {
   gameId: string;
-  ranking: [string, string, string, string]; // alamat juara 1..4
-  players: string[]; // keempat pemain (untuk validasi keanggotaan)
-  signers: string[]; // alamat yang sudah menandatangani
+  ranking: [string, string, string, string]; // addresses of 1st..4th place
+  players: string[]; // all four players (for membership validation)
+  signers: string[]; // addresses that have already signed
   status: SettlementStatus;
   txHash?: string;
   error?: string;
@@ -17,11 +17,11 @@ export interface Settlement {
 type Ranking4 = [string, string, string, string];
 
 /**
- * Orkestrasi pencairan on-chain setelah hanchan selesai.
+ * Orchestrates on-chain settlement after the hanchan finishes.
  *
- * Jalur kooperatif (utama): kumpulkan tanda tangan EIP-712 keempat pemain atas
- * ranking final → submit `settle`. Jalur fallback: `settleByServer` (server attest)
- * setelah settleDeadline lewat (ditegakkan kontrak).
+ * Cooperative path (primary): collect EIP-712 signatures from all four players over
+ * the final ranking → submit `settle`. Fallback path: `settleByServer` (server attest)
+ * after settleDeadline has passed (enforced by the contract).
  */
 @Injectable()
 export class SettlementService {
@@ -30,7 +30,7 @@ export class SettlementService {
 
   constructor(private readonly chain: ChainService) {}
 
-  /** Buka sesi settle untuk sebuah game (dipanggil saat game selesai). */
+  /** Open a settle session for a game (called when the game finishes). */
   open(gameId: string, players: string[], ranking: Ranking4): Settlement {
     const existing = this.pending.get(gameId);
     if (existing) return this.view(existing);
@@ -43,13 +43,13 @@ export class SettlementService {
       sigs: new Map<string, string>(),
     };
     this.pending.set(gameId, s);
-    this.logger.log(`Settle dibuka untuk game ${gameId}`);
+    this.logger.log(`Settle opened for game ${gameId}`);
     return this.view(s);
   }
 
   /**
-   * Terima tanda tangan pemain atas ranking final. Tanda tangan diverifikasi &
-   * dipulihkan; bila keempat terkumpul, `settle` kooperatif otomatis di-submit.
+   * Accept a player's signature over the final ranking. The signature is verified &
+   * recovered; once all four are collected, the cooperative `settle` is auto-submitted.
    */
   async addSignature(gameId: string, signature: string): Promise<Settlement> {
     const s = this.require(gameId);
@@ -62,17 +62,17 @@ export class SettlementService {
       s.ranking,
       signature,
     ).toLowerCase();
-    if (!s.players.includes(signer)) throw new Error("penanda tangan bukan pemain game ini");
+    if (!s.players.includes(signer)) throw new Error("signer is not a player in this game");
 
     s.sigs.set(signer, signature);
     if (s.sigs.size === 4) await this.submitCooperative(gameId);
     return this.view(this.require(gameId));
   }
 
-  /** Submit settle kooperatif (semua tanda tangan terkumpul). */
+  /** Submit the cooperative settle (all signatures collected). */
   async submitCooperative(gameId: string): Promise<Settlement> {
     const s = this.require(gameId);
-    if (s.sigs.size < 4) throw new Error("tanda tangan belum lengkap (butuh 4)");
+    if (s.sigs.size < 4) throw new Error("signatures incomplete (need 4)");
     const sigList = s.ranking.map((addr) => s.sigs.get(addr.toLowerCase())!) as Ranking4;
     try {
       s.txHash = await this.chain.submitSettle(BigInt(gameId), s.ranking, sigList);
@@ -84,7 +84,7 @@ export class SettlementService {
     return this.view(s);
   }
 
-  /** Fallback: server attest ranking (hanya valid on-chain setelah settleDeadline). */
+  /** Fallback: server attests the ranking (only valid on-chain after settleDeadline). */
   async submitByServer(gameId: string): Promise<Settlement> {
     const s = this.require(gameId);
     try {
@@ -102,7 +102,7 @@ export class SettlementService {
     return this.view(this.require(gameId));
   }
 
-  /** Payload EIP-712 yang harus ditandatangani pemain untuk game ini. */
+  /** EIP-712 payload that the player must sign for this game. */
   typedData(gameId: string) {
     const s = this.require(gameId);
     return resultTypedData(this.chain.address, this.chain.chain, BigInt(gameId), s.ranking);
@@ -110,7 +110,7 @@ export class SettlementService {
 
   private require(gameId: string) {
     const s = this.pending.get(gameId);
-    if (!s) throw new NotFoundException(`settle untuk game ${gameId} belum dibuka`);
+    if (!s) throw new NotFoundException(`settle for game ${gameId} not opened`);
     return s;
   }
 

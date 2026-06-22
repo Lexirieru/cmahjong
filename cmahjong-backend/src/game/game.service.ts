@@ -13,12 +13,12 @@ import { Hanchan, HanchanLength, HanchanSnapshot } from "./hanchan";
 
 interface Room {
   chainGameId: string;
-  players: string[]; // alamat per seat 0..3
+  players: string[]; // address per seat 0..3
   seed: string;
   hanchan: Hanchan;
   length: HanchanLength;
-  dbId?: string; // GameTable.id untuk relasi Move
-  moveSeq: number; // nomor urut aksi berikutnya (untuk replay)
+  dbId?: string; // GameTable.id for the Move relation
+  moveSeq: number; // sequence number of the next action (for replay)
 }
 
 export interface SettlePayload {
@@ -34,9 +34,9 @@ export interface RoundEnd {
 }
 
 /**
- * Manajer ruang game (in-memory). Sumber kebenaran fairness adalah seed on-chain;
- * di sini seed dipakai untuk membentuk tembok deterministik lalu menjalankan ronde.
- * Metadata bisa di-mirror ke Postgres (TODO: persist penuh).
+ * In-memory game room manager. The source of truth for fairness is the on-chain seed;
+ * here the seed is used to build the deterministic wall and then run the rounds.
+ * Metadata can be mirrored to Postgres (TODO: full persistence).
  */
 @Injectable()
 export class GameService implements OnModuleInit, OnModuleDestroy {
@@ -53,7 +53,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
   ) {}
 
-  /** Saat boot: pulihkan game yang masih PLAYING dari DB agar bisa di-resume. */
+  /** On boot: restore games still PLAYING from the DB so they can be resumed. */
   async onModuleInit(): Promise<void> {
     try {
       const rows = await this.prisma.gameTable.findMany({
@@ -76,21 +76,21 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
           dbId: r.id,
           moveSeq,
         });
-        this.logger.log(`Game ${r.chainGameId} dipulihkan dari DB (resume, ${moveSeq} moves)`);
+        this.logger.log(`Game ${r.chainGameId} restored from DB (resume, ${moveSeq} moves)`);
       }
     } catch (e) {
-      this.logger.warn(`Gagal memuat game aktif dari DB: ${(e as Error).message}`);
+      this.logger.warn(`Failed to load active games from DB: ${(e as Error).message}`);
     }
   }
 
-  /** Saat shutdown: flush semua buffer aksi agar tak ada yang hilang. */
+  /** On shutdown: flush all action buffers so nothing is lost. */
   async onModuleDestroy(): Promise<void> {
     for (const t of this.moveFlushTimers.values()) clearTimeout(t);
     this.moveFlushTimers.clear();
     await Promise.all([...this.moveBuffers.keys()].map((id) => this.flushMoves(id)));
   }
 
-  /** Jadwalkan simpan snapshot (coalesced: maks 1 tulis / 400ms per game). */
+  /** Schedule a snapshot save (coalesced: max 1 write / 400ms per game). */
   private queueSnapshot(chainGameId: string): void {
     if (this.snapTimers.has(chainGameId)) return;
     const t = setTimeout(() => {
@@ -111,11 +111,11 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
         data: { liveState: room.hanchan.snapshot() as any },
       });
     } catch (e) {
-      this.logger.warn(`saveSnapshot gagal: ${(e as Error).message}`);
+      this.logger.warn(`saveSnapshot failed: ${(e as Error).message}`);
     }
   }
 
-  /** Catat satu aksi ke buffer untuk replay (di-flush ter-batch). */
+  /** Record a single action to the buffer for replay (flushed in batches). */
   private logMove(chainGameId: string, kind: string, seatIndex: number, payload: object = {}) {
     const room = this.rooms.get(chainGameId);
     if (!room) return;
@@ -139,7 +139,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
     this.moveFlushTimers.set(chainGameId, t);
   }
 
-  /** Tulis buffer aksi ke DB (batch). Di-serialize per game agar tak balapan. */
+  /** Write the action buffer to the DB (batch). Serialized per game to avoid races. */
   flushMoves(chainGameId: string): Promise<unknown> {
     const prev = this.flushChain.get(chainGameId) ?? Promise.resolve();
     const next = prev.catch(() => {}).then(() => this.doFlush(chainGameId));
@@ -152,7 +152,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
     const buf = this.moveBuffers.get(chainGameId);
     if (!buf || buf.length === 0) return;
     if (!room?.dbId) {
-      this.scheduleMoveFlush(chainGameId); // row DB belum siap — coba lagi
+      this.scheduleMoveFlush(chainGameId); // DB row not ready yet — try again
       return;
     }
     const rows = buf.splice(0, buf.length).map((m) => ({
@@ -166,11 +166,11 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.prisma.move.createMany({ data: rows, skipDuplicates: true });
     } catch (e) {
-      this.logger.warn(`flushMoves gagal: ${(e as Error).message}`);
+      this.logger.warn(`flushMoves failed: ${(e as Error).message}`);
     }
   }
 
-  /** Mirror lifecycle game ke Postgres (best-effort; DB mati tak mengganggu gameplay). */
+  /** Mirror the game lifecycle to Postgres (best-effort; a dead DB does not disrupt gameplay). */
   private async persistStart(room: Room) {
     try {
       let token = "";
@@ -183,7 +183,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
           buyIn = g.buyIn.toString();
           server = g.server;
         } catch {
-          /* game offchain/test */
+          /* offchain/test game */
         }
       }
       const row = await this.prisma.gameTable.upsert({
@@ -204,7 +204,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
       });
       room.dbId = row.id;
     } catch (e) {
-      this.logger.warn(`persistStart gagal: ${(e as Error).message}`);
+      this.logger.warn(`persistStart failed: ${(e as Error).message}`);
     }
   }
 
@@ -223,19 +223,19 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
         ),
       );
     } catch (e) {
-      this.logger.warn(`persistSettled gagal: ${(e as Error).message}`);
+      this.logger.warn(`persistSettled failed: ${(e as Error).message}`);
     }
   }
 
   /**
-   * Mulai ronde untuk sebuah game. Seed diambil dari on-chain bila tersedia,
-   * atau diberikan langsung (mode dev/test).
+   * Start a round for a game. The seed is read from on-chain when available,
+   * or provided directly (dev/test mode).
    */
   async startRound(
     chainGameId: string,
     opts?: { players?: string[]; seed?: string; length?: HanchanLength },
   ): Promise<Room> {
-    // idempoten: bila game sudah berjalan, kembalikan yang ada (banyak klien bisa memicu start)
+    // idempotent: if the game is already running, return the existing one (many clients can trigger start)
     const existing = this.rooms.get(chainGameId);
     if (existing) return existing;
 
@@ -257,14 +257,14 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
       moveSeq: 0,
     };
     this.rooms.set(chainGameId, room);
-    this.logger.log(`Game ${chainGameId} dimulai (${opts?.length ?? "hanchan"})`);
-    await this.persistStart(room); // tunggu agar dbId siap sebelum aksi di-log
+    this.logger.log(`Game ${chainGameId} started (${opts?.length ?? "hanchan"})`);
+    await this.persistStart(room); // wait so that dbId is ready before actions are logged
     return room;
   }
 
   private room(chainGameId: string): Room {
     const room = this.rooms.get(chainGameId);
-    if (!room) throw new NotFoundException(`game ${chainGameId} tidak ditemukan`);
+    if (!room) throw new NotFoundException(`game ${chainGameId} not found`);
     return room;
   }
 
@@ -272,7 +272,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
     return this.room(chainGameId).hanchan.round;
   }
 
-  /** Catat hasil 1 ronde ke hanchan; bila game selesai, buka sesi settle + tanda tangan server. */
+  /** Record the result of one round into the hanchan; if the game is finished, open the settle session + server signature. */
   async recordOutcome(chainGameId: string, outcome: RoundOutcome): Promise<RoundEnd> {
     const room = this.room(chainGameId);
     room.hanchan.recordOutcome(outcome);
@@ -280,12 +280,12 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
     const end: RoundEnd = { outcome, finished, hanchan: room.hanchan.state() };
     if (finished) {
       end.settle = await this.finalizeAndSign(chainGameId);
-      // buka sesi settle: pemain dapat submit tanda tangan untuk `settle` kooperatif
+      // open the settle session: players can submit signatures for a cooperative `settle`
       this.settlement.open(chainGameId, room.players, end.settle.ranking);
       void this.persistSettled(chainGameId, end.settle.ranking, room.hanchan.points);
-      void this.flushMoves(chainGameId); // tulis sisa aksi sebelum game ditutup
+      void this.flushMoves(chainGameId); // write the remaining actions before the game is closed
     } else {
-      this.queueSnapshot(chainGameId); // ronde baru — simpan agar resume akurat
+      this.queueSnapshot(chainGameId); // new round — save so resume is accurate
     }
     return end;
   }
@@ -294,12 +294,12 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
     return this.room(chainGameId).hanchan.state();
   }
 
-  /** Seat dari alamat pemain. */
+  /** Seat from a player's address. */
   seatOf(chainGameId: string, address: string): number {
     const seat = this.room(chainGameId).players.findIndex(
       (p) => p.toLowerCase() === address.toLowerCase(),
     );
-    if (seat === -1) throw new NotFoundException("pemain bukan bagian dari game ini");
+    if (seat === -1) throw new NotFoundException("player is not part of this game");
     return seat;
   }
 
@@ -307,7 +307,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
     return this.round(chainGameId).publicState();
   }
 
-  /** Tangan privat — hanya kirim ke pemilik seat. */
+  /** Private hand — only send to the seat's owner. */
   handOf(chainGameId: string, seat: number) {
     return this.round(chainGameId).handOf(seat);
   }
@@ -327,7 +327,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
 
   tsumo(chainGameId: string, seat: number): RoundOutcome {
     const round = this.round(chainGameId);
-    if (round.turn !== seat) throw new Error("bukan giliran seat ini");
+    if (round.turn !== seat) throw new Error("not this seat's turn");
     const out = round.declareTsumo();
     this.logMove(chainGameId, "tsumo", seat);
     return out;
@@ -337,7 +337,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
     return this.round(chainGameId).availableCalls();
   }
 
-  /** Respons call seorang pemain (pon/chi/kan/ron/pass); resolusi prioritas otomatis. */
+  /** A player's call response (pon/chi/kan/ron/pass); automatic priority resolution. */
   respond(chainGameId: string, seat: number, claim: CallClaim): CallResolution {
     const res = this.round(chainGameId).respond(seat, claim);
     this.logMove(chainGameId, claim.type, seat, claim.low !== undefined ? { low: claim.low } : {});
@@ -352,7 +352,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
     return out;
   }
 
-  /** Shouminkan (tambah pon -> kan); bisa memicu fase chankan. */
+  /** Shouminkan (add pon -> kan); can trigger the chankan phase. */
   addedKan(chainGameId: string, seat: number, kind: number): RoundOutcome | null {
     const out = this.round(chainGameId).addedKan(seat, kind);
     this.logMove(chainGameId, "addedkan", seat, { kind });
@@ -361,12 +361,12 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Hitung ranking final (alamat juara 1..4) dan tandatangani sebagai server
-   * untuk settleByServer di kontrak. Memakai poin akhir hanchan.
+   * Compute the final ranking (addresses of places 1..4) and sign it as the server
+   * for settleByServer in the contract. Uses the final hanchan points.
    */
   async finalizeAndSign(chainGameId: string): Promise<SettlePayload> {
     const room = this.room(chainGameId);
-    const order = room.hanchan.finalRanking(); // seat terurut poin akhir
+    const order = room.hanchan.finalRanking(); // seats sorted by final points
     const ranking = order.map((seat) => room.players[seat]) as [
       string,
       string,
@@ -377,7 +377,7 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
     try {
       serverSig = await this.chain.signRanking(BigInt(chainGameId), ranking);
     } catch (err) {
-      this.logger.warn(`Gagal tandatangan server: ${(err as Error).message}`);
+      this.logger.warn(`Failed to sign as server: ${(err as Error).message}`);
     }
     return { ranking, serverSig };
   }

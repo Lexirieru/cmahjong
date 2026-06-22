@@ -13,13 +13,13 @@ import { SettlementService } from "../settlement/settlement.service";
 import { RoundOutcome } from "./round";
 
 /**
- * Gateway realtime (Socket.IO) untuk meja cMahjong.
+ * Realtime (Socket.IO) gateway for the cMahjong table.
  *
- * Masuk:  join · start · discard · riichi · call · ankan · addedkan · tsumo · submitSignature
- * Keluar: state (publik, broadcast) · hand (privat per pemain) · roundEnd · newRound · settleReady
+ * Inbound:  join · start · discard · riichi · call · ankan · addedkan · tsumo · submitSignature
+ * Outbound: state (public, broadcast) · hand (private per player) · roundEnd · newRound · settleReady
  *
- * Setiap perubahan state memanggil `sync`: broadcast state publik + kirim ke tiap
- * socket HANYA tangannya sendiri (hidden hands terjaga, tangan selalu terkini).
+ * Every state change calls `sync`: broadcast the public state + send each
+ * socket ONLY its own hand (hidden hands stay hidden, hands always up to date).
  */
 @WebSocketGateway({ cors: { origin: "*" } })
 export class GameGateway implements OnGatewayConnection {
@@ -34,17 +34,17 @@ export class GameGateway implements OnGatewayConnection {
   ) {}
 
   handleConnection(client: Socket) {
-    this.logger.debug(`klien terhubung: ${client.id}`);
+    this.logger.debug(`client connected: ${client.id}`);
   }
 
-  /** Kirim tiap socket tangannya sendiri DULU, lalu broadcast state publik
-   *  (urutan ini memastikan klien sudah pegang tangan terkini saat memproses state). */
+  /** Send each socket its own hand FIRST, then broadcast the public state
+   *  (this order ensures the client already holds the latest hand when processing the state). */
   private async sync(gameId: string) {
     let state;
     try {
       state = this.games.publicState(gameId);
     } catch {
-      return; // ronde belum mulai
+      return; // round has not started yet
     }
 
     const sockets = await this.server.in(gameId).fetchSockets();
@@ -55,7 +55,7 @@ export class GameGateway implements OnGatewayConnection {
         const seat = this.games.seatOf(gameId, address);
         s.emit("hand", { seat, tiles: this.games.handOf(gameId, seat) });
       } catch {
-        /* socket ini bukan pemain */
+        /* this socket is not a player */
       }
     }
 
@@ -139,7 +139,7 @@ export class GameGateway implements OnGatewayConnection {
     return { ok: true };
   }
 
-  /** Pemain mengirim tanda tangan EIP-712 atas ranking final (settle kooperatif). */
+  /** A player submits an EIP-712 signature over the final ranking (cooperative settle). */
   @SubscribeMessage("submitSignature")
   async onSubmitSignature(@MessageBody() body: { gameId: string; signature: string }) {
     const settle = await this.settlement.addSignature(body.gameId, body.signature);
@@ -153,7 +153,7 @@ export class GameGateway implements OnGatewayConnection {
     if (end.finished) {
       this.server.to(gameId).emit("settleReady", end.settle);
     } else {
-      // ronde baru sudah dimulai — dorong state + tangan baru otomatis
+      // a new round has already started — automatically push the new state + hands
       await this.sync(gameId);
       this.server.to(gameId).emit("newRound", this.games.hanchanState(gameId));
     }

@@ -13,32 +13,32 @@ describe("signer EIP-712 GameResult", () => {
     "0x0000000000000000000000000000000000000004",
   ];
 
-  it("sign lalu recover menghasilkan alamat penanda tangan", async () => {
+  it("sign then recover produces the signer address", async () => {
     const sig = await signResult(wallet, CONTRACT, CHAIN_ID, 1n, ranking);
     expect(recoverResultSigner(CONTRACT, CHAIN_ID, 1n, ranking, sig)).toBe(wallet.address);
     expect(verifyResult(CONTRACT, CHAIN_ID, 1n, ranking, sig, wallet.address)).toBe(true);
   });
 
-  it("verify gagal bila ranking berbeda (anti-tamper)", async () => {
+  it("verify fails when ranking differs (anti-tamper)", async () => {
     const sig = await signResult(wallet, CONTRACT, CHAIN_ID, 1n, ranking);
     const tampered: [string, string, string, string] = [ranking[1], ranking[0], ranking[2], ranking[3]];
     expect(verifyResult(CONTRACT, CHAIN_ID, 1n, tampered, sig, wallet.address)).toBe(false);
   });
 
-  it("verify gagal bila gameId / signature ngawur", async () => {
+  it("verify fails when gameId / signature is bogus", async () => {
     const sig = await signResult(wallet, CONTRACT, CHAIN_ID, 1n, ranking);
     expect(verifyResult(CONTRACT, CHAIN_ID, 2n, ranking, sig, wallet.address)).toBe(false);
     expect(verifyResult(CONTRACT, CHAIN_ID, 1n, ranking, "0xdeadbeef", wallet.address)).toBe(false);
   });
 
-  it("rankingHash konsisten (packed keccak)", () => {
+  it("rankingHash is consistent (packed keccak)", () => {
     expect(rankingHash(ranking)).toMatch(/^0x[0-9a-f]{64}$/);
   });
 
-  // REGRESI: packing address[4] HARUS cocok dengan abi.encodePacked di kontrak
-  // (pad 32B). Nilai ini diverifikasi cocok dengan resultDigest on-chain saat e2e
-  // settle mainnet (tx 0x33fca72...). Bila berubah -> settle akan revert NotAPlayer.
-  it("rankingHash sesuai abi.encodePacked(address[4]) on-chain", () => {
+  // REGRESSION: packing address[4] MUST match abi.encodePacked in the contract
+  // (32B pad). This value was verified to match the on-chain resultDigest during the
+  // mainnet settle e2e (tx 0x33fca72...). If it changes -> settle will revert NotAPlayer.
+  it("rankingHash matches on-chain abi.encodePacked(address[4])", () => {
     const onchainRanking: [string, string, string, string] = [
       "0xE75223EA0e0aB0C126398f3fAa43148d4D3C8EF2",
       "0x318aEac898507A338835751Bd1E23aa44400Fdd5",

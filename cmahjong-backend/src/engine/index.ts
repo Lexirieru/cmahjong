@@ -1,4 +1,4 @@
-/** Barrel export untuk engine Riichi cMahjong. */
+/** Barrel export for the cMahjong Riichi engine. */
 export * from "./tiles";
 export * from "./wall";
 export * from "./deal";

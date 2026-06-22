@@ -1,9 +1,9 @@
 /**
- * Deteksi yaku Riichi untuk satu dekomposisi tangan menang.
+ * Riichi yaku detection for a single winning-hand decomposition.
  *
- * Cakupan saat ini: yaku umum + yakuman utama (lihat daftar di bawah). Yaku langka
- * tertentu (mis. sankantsu, suukantsu — butuh model kan) ditandai TODO. Dora dihitung
- * terpisah di score.ts (bukan yaku, tapi menambah han).
+ * Current coverage: common yaku + major yakuman (see list below). Certain rare
+ * yaku (e.g. sankantsu, suukantsu — need a kan model) are marked TODO. Dora is
+ * counted separately in score.ts (not a yaku, but adds han).
  */
 import { Decomposition, Meld } from "./agari";
 import { isHonor, isTerminal, isYaochuu, suitOf, rankOf } from "./tiles";
@@ -11,18 +11,18 @@ import { isHonor, isTerminal, isYaochuu, suitOf, rankOf } from "./tiles";
 export interface WinContext {
   seatWind: number; // kind 27..30 (E,S,W,N)
   roundWind: number; // kind 27..30
-  winningTile: number; // kind ubin penyelesai
+  winningTile: number; // kind of the winning tile
   isTsumo: boolean;
-  isMenzen: boolean; // tangan tertutup penuh (tanpa call terbuka)
+  isMenzen: boolean; // fully concealed hand (no open call)
   riichi?: boolean;
   doubleRiichi?: boolean;
   ippatsu?: boolean;
-  haitei?: boolean; // menang dari ubin terakhir (tsumo)
-  houtei?: boolean; // menang dari buangan terakhir (ron)
-  rinshan?: boolean; // menang dari ubin pengganti setelah kan
-  chankan?: boolean; // merampok kan
-  tenhou?: boolean; // dealer menang di tangan pembuka
-  chiihou?: boolean; // non-dealer menang di draw pertama
+  haitei?: boolean; // win on the last tile (tsumo)
+  houtei?: boolean; // win on the last discard (ron)
+  rinshan?: boolean; // win on the replacement tile after a kan
+  chankan?: boolean; // robbing a kan
+  tenhou?: boolean; // dealer wins on the opening hand
+  chiihou?: boolean; // non-dealer wins on the first draw
 }
 
 export interface Yaku {
@@ -40,7 +40,7 @@ function isTripletLike(m: Meld): boolean {
   return m.type === "triplet" || m.type === "kan";
 }
 
-/** Yaku untuk dekomposisi standar (4 set + pasangan). */
+/** Yaku for a standard decomposition (4 sets + pair). */
 export function yakuForStandard(d: Decomposition, ctx: WinContext): Yaku[] {
   const yaku: Yaku[] = [];
   const allKinds: number[] = [];
@@ -54,11 +54,11 @@ export function yakuForStandard(d: Decomposition, ctx: WinContext): Yaku[] {
   const triplets = d.melds.filter(isTripletLike);
   const menzen = ctx.isMenzen;
 
-  // --- Yakuman lebih dulu (mengabaikan yaku biasa) ---
+  // --- Yakuman first (overrides ordinary yaku) ---
   const ym = yakumanForStandard(d, ctx);
   if (ym.length) return ym;
 
-  // --- riichi & situasional ---
+  // --- riichi & situational ---
   if (ctx.doubleRiichi) yaku.push({ name: "Double Riichi", han: 2 });
   else if (ctx.riichi) yaku.push({ name: "Riichi", han: 1 });
   if (ctx.ippatsu) yaku.push({ name: "Ippatsu", han: 1 });
@@ -68,51 +68,51 @@ export function yakuForStandard(d: Decomposition, ctx: WinContext): Yaku[] {
   if (ctx.rinshan) yaku.push({ name: "Rinshan Kaihou", han: 1 });
   if (ctx.chankan) yaku.push({ name: "Chankan", han: 1 });
 
-  // --- Pinfu: tertutup, semua urutan, pasangan bukan yakuhai, tunggu ryanmen ---
+  // --- Pinfu: concealed, all sequences, pair is not yakuhai, ryanmen wait ---
   if (menzen && seqs.length === 4 && !isYakuhaiPair(d.pair, ctx) && isRyanmenWait(d, ctx)) {
     yaku.push({ name: "Pinfu", han: 1 });
   }
 
-  // --- Tanyao: tanpa terminal/honor ---
+  // --- Tanyao: no terminals/honors ---
   if (allKinds.every((k) => !isYaochuu(k))) {
     yaku.push({ name: "Tanyao", han: 1 });
   }
 
-  // --- Iipeikou (tertutup): dua urutan identik ---
+  // --- Iipeikou (concealed): two identical sequences ---
   if (menzen) {
     const peikou = countIdenticalSequencePairs(seqs);
     if (peikou === 2) yaku.push({ name: "Ryanpeikou", han: 3 });
     else if (peikou === 1) yaku.push({ name: "Iipeikou", han: 1 });
   }
 
-  // --- Yakuhai (triplet naga / angin) ---
+  // --- Yakuhai (dragon / wind triplet) ---
   for (const t of triplets) {
     if (DRAGONS.includes(t.kind)) yaku.push({ name: `Yakuhai (${t.kind})`, han: 1 });
     if (t.kind === ctx.roundWind) yaku.push({ name: "Yakuhai (round wind)", han: 1 });
     if (t.kind === ctx.seatWind) yaku.push({ name: "Yakuhai (seat wind)", han: 1 });
   }
 
-  // --- Sanshoku doujun: urutan sama di 3 suit ---
+  // --- Sanshoku doujun: same sequence in 3 suits ---
   if (hasSanshokuDoujun(seqs)) yaku.push({ name: "Sanshoku Doujun", han: menzen ? 2 : 1 });
-  // --- Sanshoku doukou: triplet sama di 3 suit ---
+  // --- Sanshoku doukou: same triplet in 3 suits ---
   if (hasSanshokuDoukou(triplets)) yaku.push({ name: "Sanshoku Doukou", han: 2 });
-  // --- Ittsuu: 123-456-789 satu suit ---
+  // --- Ittsuu: 123-456-789 in one suit ---
   if (hasIttsuu(seqs)) yaku.push({ name: "Ittsuu", han: menzen ? 2 : 1 });
 
-  // --- Toitoi: semua triplet ---
+  // --- Toitoi: all triplets ---
   if (triplets.length === 4) yaku.push({ name: "Toitoi", han: 2 });
-  // --- Sanankou: tiga triplet tertutup ---
+  // --- Sanankou: three concealed triplets ---
   if (countConcealedTriplets(d, ctx) >= 3) yaku.push({ name: "Sanankou", han: 2 });
 
-  // --- Chanta / Junchan: tiap set memuat terminal/honor ---
+  // --- Chanta / Junchan: every set contains a terminal/honor ---
   const chantaKind = chantaType(d);
   if (chantaKind === "junchan") yaku.push({ name: "Junchan", han: menzen ? 3 : 2 });
   else if (chantaKind === "chanta") yaku.push({ name: "Chanta", han: menzen ? 2 : 1 });
 
-  // --- Honroutou: semua terminal/honor (otomatis dengan toitoi/chiitoi) ---
+  // --- Honroutou: all terminals/honors (automatic with toitoi/chiitoi) ---
   if (allKinds.every((k) => isYaochuu(k))) yaku.push({ name: "Honroutou", han: 2 });
 
-  // --- Shousangen: 2 triplet naga + pasangan naga ---
+  // --- Shousangen: 2 dragon triplets + dragon pair ---
   if (isShousangen(d)) yaku.push({ name: "Shousangen", han: 2 });
 
   // --- Honitsu / Chinitsu ---
@@ -123,7 +123,7 @@ export function yakuForStandard(d: Decomposition, ctx: WinContext): Yaku[] {
   return yaku;
 }
 
-/** Yaku untuk chiitoitsu. */
+/** Yaku for chiitoitsu. */
 export function yakuForChiitoitsu(counts: number[], ctx: WinContext): Yaku[] {
   const yaku: Yaku[] = [];
   const kinds: number[] = [];
@@ -153,9 +153,9 @@ export function yakuForChiitoitsu(counts: number[], ctx: WinContext): Yaku[] {
   return yaku;
 }
 
-/** Yaku untuk kokushi musou (yakuman, double bila menunggu 13-sisi). */
+/** Yaku for kokushi musou (yakuman, double when waiting on 13 sides). */
 export function yakuForKokushi(counts: number[], ctx: WinContext): Yaku[] {
-  const thirteenWait = counts[ctx.winningTile] === 2; // tile penyelesai berpasangan -> 13-wait
+  const thirteenWait = counts[ctx.winningTile] === 2; // winning tile is paired -> 13-wait
   return [
     thirteenWait
       ? { name: "Kokushi Musou Juusanmenmachi", han: 26, yakuman: true }
@@ -164,7 +164,7 @@ export function yakuForKokushi(counts: number[], ctx: WinContext): Yaku[] {
 }
 
 // --------------------------------------------------------------------------
-// Yakuman untuk dekomposisi standar
+// Yakuman for the standard decomposition
 // --------------------------------------------------------------------------
 function yakumanForStandard(d: Decomposition, ctx: WinContext): Yaku[] {
   const out: Yaku[] = [];
@@ -176,28 +176,28 @@ function yakumanForStandard(d: Decomposition, ctx: WinContext): Yaku[] {
   }
   allKinds.push(d.pair, d.pair);
 
-  // Daisangen: 3 triplet naga
+  // Daisangen: 3 dragon triplets
   const dragonTrips = triplets.filter((t) => DRAGONS.includes(t.kind)).length;
   if (dragonTrips === 3) out.push({ name: "Daisangen", han: 13, yakuman: true });
 
-  // Suuankou: 4 triplet tertutup
+  // Suuankou: 4 concealed triplets
   if (triplets.length === 4 && countConcealedTriplets(d, ctx) === 4) {
     out.push({ name: "Suuankou", han: 13, yakuman: true });
   }
 
-  // Suushii: angin
+  // Suushii: winds
   const windTrips = triplets.filter((t) => t.kind >= 27 && t.kind <= 30).length;
   const pairIsWind = d.pair >= 27 && d.pair <= 30;
   if (windTrips === 4) out.push({ name: "Daisuushii", han: 26, yakuman: true });
   else if (windTrips === 3 && pairIsWind) out.push({ name: "Shousuushii", han: 13, yakuman: true });
 
-  // Tsuuiisou: semua honor
+  // Tsuuiisou: all honors
   if (allKinds.every((k) => isHonor(k))) out.push({ name: "Tsuuiisou", han: 13, yakuman: true });
 
-  // Chinroutou: semua terminal
+  // Chinroutou: all terminals
   if (allKinds.every((k) => isTerminal(k))) out.push({ name: "Chinroutou", han: 13, yakuman: true });
 
-  // Ryuuiisou: hijau (2,3,4,6,8 sou + hatsu)
+  // Ryuuiisou: green (2,3,4,6,8 sou + hatsu)
   const greens = new Set([19, 20, 21, 23, 25, 32]); // kind: 2s..4s,6s,8s,hatsu
   if (allKinds.every((k) => greens.has(k))) out.push({ name: "Ryuuiisou", han: 13, yakuman: true });
 
@@ -211,20 +211,20 @@ function yakumanForStandard(d: Decomposition, ctx: WinContext): Yaku[] {
 }
 
 // --------------------------------------------------------------------------
-// Helper deteksi
+// Detection helpers
 // --------------------------------------------------------------------------
 function isYakuhaiPair(pair: number, ctx: WinContext): boolean {
   return DRAGONS.includes(pair) || pair === ctx.roundWind || pair === ctx.seatWind;
 }
 
 function isRyanmenWait(d: Decomposition, ctx: WinContext): boolean {
-  // tunggu ryanmen: ubin penyelesai berada di ujung terbuka sebuah urutan
+  // ryanmen wait: the winning tile is at the open end of a sequence
   for (const m of d.melds) {
     if (!isSequence(m)) continue;
     const low = m.kind;
     const r = rankOf(low);
-    // tile penyelesai = low (tunggu sisi bawah) atau low+2 (sisi atas)
-    if (ctx.winningTile === low && r <= 6) return true; // mis. 2-3 menunggu 1/4 -> ambil 1? edge; sederhana
+    // winning tile = low (lower-side wait) or low+2 (upper side)
+    if (ctx.winningTile === low && r <= 6) return true; // e.g. 2-3 waiting on 1/4 -> take 1? edge; simplified
     if (ctx.winningTile === low + 2 && r >= 1) return true;
   }
   return false;
@@ -241,7 +241,7 @@ function countIdenticalSequencePairs(seqs: Meld[]): number {
 function hasSanshokuDoujun(seqs: Meld[]): boolean {
   for (const s of seqs) {
     if (s.kind >= 27) continue;
-    const r = s.kind % 9; // posisi dalam suit
+    const r = s.kind % 9; // position within the suit
     const m = r; // man base 0
     const p = 9 + r;
     const so = 18 + r;
@@ -270,11 +270,11 @@ function hasIttsuu(seqs: Meld[]): boolean {
 }
 
 function countConcealedTriplets(d: Decomposition, ctx: WinContext): number {
-  // triplet tertutup; bila menang via ron pada triplet penyelesai, itu dianggap terbuka
+  // concealed triplets; if won via ron on the completing triplet, it counts as open
   let n = 0;
   for (const m of d.melds) {
     if (!isTripletLike(m) || m.open) continue;
-    if (!ctx.isTsumo && m.kind === ctx.winningTile) continue; // ron menyelesaikan triplet -> tidak tertutup
+    if (!ctx.isTsumo && m.kind === ctx.winningTile) continue; // ron completes the triplet -> not concealed
     n++;
   }
   return n;
@@ -306,7 +306,7 @@ function flushType(kinds: number[]): "chinitsu" | "honitsu" | null {
   const hasHonor = kinds.some((k) => k >= 27);
   if (suits.size === 1 && !hasHonor) return "chinitsu";
   if (suits.size === 1 && hasHonor) return "honitsu";
-  if (suits.size === 0 && hasHonor) return null; // semua honor -> tsuuiisou (ditangani terpisah)
+  if (suits.size === 0 && hasHonor) return null; // all honors -> tsuuiisou (handled separately)
   return null;
 }
 
@@ -316,7 +316,7 @@ function isChuuren(kinds: number[]): boolean {
   const base = Math.floor(kinds[0] / 9) * 9;
   const counts = new Array(9).fill(0);
   for (const k of kinds) counts[k - base]++;
-  // pola 3-1-1-1-1-1-1-1-3 + satu ekstra
+  // pattern 3-1-1-1-1-1-1-1-3 + one extra
   const need = [3, 1, 1, 1, 1, 1, 1, 1, 3];
   for (let i = 0; i < 9; i++) {
     if (counts[i] < need[i]) return false;

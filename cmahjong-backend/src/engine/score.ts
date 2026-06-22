@@ -1,8 +1,8 @@
 /**
- * Penilaian tangan Riichi: hitung fu, han, dan poin (termasuk tabel mangan+).
+ * Riichi hand scoring: compute fu, han, and points (including the mangan+ table).
  *
- * Memilih dekomposisi dengan poin tertinggi (aturan baku: tangan ditafsir
- * semenguntungkan mungkin bagi pemenang).
+ * Picks the decomposition with the highest points (standard rule: the hand is
+ * interpreted as favorably as possible for the winner).
  */
 import {
   checkAgari,
@@ -24,27 +24,27 @@ import {
 const DRAGONS = [31, 32, 33];
 
 export interface ScoreInput {
-  /** counts 34-elemen ubin TERTUTUP (termasuk ubin penyelesai; TIDAK termasuk meld terbuka/kan) */
+  /** 34-element counts of CONCEALED tiles (including the winning tile; NOT including open melds/kan) */
   counts: number[];
-  /** meld tetap hasil call/kan (open: true untuk pon/chi/daiminkan, false untuk ankan) */
+  /** fixed melds from call/kan (open: true for pon/chi/daiminkan, false for ankan) */
   openMelds?: Meld[];
   ctx: WinContext;
-  /** kind indikator dora yang terbuka */
+  /** revealed dora indicator kinds */
   doraIndicators?: number[];
-  /** indikator uradora (hanya bila riichi) */
+  /** uradora indicators (only when riichi) */
   uraIndicators?: number[];
-  /** jumlah red-five (aka dora) di tangan */
+  /** number of red-fives (aka dora) in the hand */
   aka?: number;
-  /** apakah pemenang adalah dealer (East) */
+  /** whether the winner is the dealer (East) */
   isDealer: boolean;
 }
 
 export interface Payments {
-  /** total poin yang diterima pemenang */
+  /** total points received by the winner */
   total: number;
-  /** untuk ron: jumlah yang dibayar pembuang */
+  /** for ron: the amount paid by the discarder */
   ron?: number;
-  /** untuk tsumo non-dealer: { fromDealer, fromEach } */
+  /** for non-dealer tsumo: { fromDealer, fromEach } */
   tsumo?: { fromDealer: number; fromEach: number } | { fromEach: number };
 }
 
@@ -67,7 +67,7 @@ function roundUp10(n: number): number {
   return Math.ceil(n / 10) * 10;
 }
 
-/** Hitung fu untuk satu dekomposisi standar. */
+/** Compute fu for a single standard decomposition. */
 export function computeFu(d: Decomposition, ctx: WinContext): number {
   // Pinfu: tsumo 20, ron 30
   const seqs = d.melds.filter((m) => m.type === "sequence");
@@ -80,7 +80,7 @@ export function computeFu(d: Decomposition, ctx: WinContext): number {
 
   let fu = 20;
 
-  // pasangan yakuhai
+  // yakuhai pair
   if (DRAGONS.includes(d.pair)) fu += 2;
   if (d.pair === ctx.roundWind) fu += 2;
   if (d.pair === ctx.seatWind) fu += 2;
@@ -97,10 +97,10 @@ export function computeFu(d: Decomposition, ctx: WinContext): number {
     fu += base;
   }
 
-  // tunggu kanchan/penchan/tanki +2
+  // kanchan/penchan/tanki wait +2
   fu += waitFu(d, ctx);
 
-  // tsumo +2 (kecuali pinfu)
+  // tsumo +2 (except pinfu)
   if (ctx.isTsumo && !isPinfuShape) fu += 2;
   // menzen ron +10
   if (!ctx.isTsumo && ctx.isMenzen) fu += 10;
@@ -112,14 +112,14 @@ export function computeFu(d: Decomposition, ctx: WinContext): number {
 
 function waitFu(d: Decomposition, ctx: WinContext): number {
   const w = ctx.winningTile;
-  if (d.pair === w) return 2; // tanki (tunggu pasangan)
+  if (d.pair === w) return 2; // tanki (pair wait)
   for (const m of d.melds) {
     if (m.type !== "sequence") continue;
     const low = m.kind;
     const r = rankOf(low);
-    if (w === low + 1) return 2; // kanchan (tengah)
-    if (w === low && r === 1) return 2; // penchan 1-2 menunggu 3 -> low=1? edge
-    if (w === low + 2 && rankOf(low + 2) === 9) return 2; // penchan 8-9 menunggu 7
+    if (w === low + 1) return 2; // kanchan (middle)
+    if (w === low && r === 1) return 2; // penchan 1-2 waiting on 3 -> low=1? edge
+    if (w === low + 2 && rankOf(low + 2) === 9) return 2; // penchan 8-9 waiting on 7
   }
   return 0;
 }
@@ -143,7 +143,7 @@ function nonDealerSplit(base: number, isTsumo: boolean): Payments {
   return { total: ron, ron };
 }
 
-/** Tentukan base point & nama limit dari han/fu. */
+/** Determine base point & limit name from han/fu. */
 function baseAndLimit(han: number, fu: number): { base: number; limit?: string } {
   if (han >= 11) return { base: 6000, limit: "Sanbaiman" };
   if (han >= 8) return { base: 4000, limit: "Baiman" };
@@ -176,7 +176,7 @@ function countDora(fullCounts: number[], indicators: number[] | undefined, aka: 
   return n;
 }
 
-/** Hitung seluruh ubin (tertutup + meld) sebagai counts 34-elemen, untuk dora. */
+/** Count all tiles (concealed + melds) as 34-element counts, for dora. */
 function fullCountsOf(input: ScoreInput): number[] {
   const full = input.counts.slice();
   for (const m of input.openMelds ?? []) {
@@ -185,11 +185,11 @@ function fullCountsOf(input: ScoreInput): number[] {
   return full;
 }
 
-/** Skor untuk satu interpretasi standar. */
+/** Score for a single standard interpretation. */
 function scoreStandard(d: Decomposition, input: ScoreInput, fullCounts: number[]): ScoreResult {
   const { ctx } = input;
   const yaku = yakuForStandard(d, ctx);
-  if (yaku.length === 0) return NO_WIN; // tidak ada yaku -> tak bisa menang
+  if (yaku.length === 0) return NO_WIN; // no yaku -> cannot win
 
   const yakuman = yaku.some((y) => y.yakuman);
   if (yakuman) {
@@ -207,13 +207,13 @@ function scoreStandard(d: Decomposition, input: ScoreInput, fullCounts: number[]
   return { agari: true, han, fu, yaku, yakuman: false, limitName: limit, payments: p };
 }
 
-/** Skor tangan lengkap; memilih interpretasi terbaik. */
+/** Score the full hand; pick the best interpretation. */
 export function scoreHand(input: ScoreInput): ScoreResult {
   const melds = input.openMelds ?? [];
   const fullCounts = fullCountsOf(input);
   const candidates: ScoreResult[] = [];
 
-  // chiitoitsu & kokushi hanya untuk tangan tertutup penuh (tanpa call/kan)
+  // chiitoitsu & kokushi only for a fully concealed hand (no call/kan)
   if (melds.length === 0) {
     const agari = checkAgari(input.counts);
 
@@ -256,14 +256,14 @@ export function scoreHand(input: ScoreInput): ScoreResult {
     }
   }
 
-  // dekomposisi standar (memperhitungkan meld terbuka/kan)
+  // standard decomposition (accounting for open melds/kan)
   for (const d of winningDecompositions(input.counts, melds)) {
     const r = scoreStandard(d, input, fullCounts);
     if (r.agari) candidates.push(r);
   }
 
-  if (candidates.length === 0) return NO_WIN; // bukan menang / tanpa yaku
-  // pilih poin tertinggi (yakuman > han > fu)
+  if (candidates.length === 0) return NO_WIN; // not a win / no yaku
+  // pick the highest points (yakuman > han > fu)
   candidates.sort((a, b) => {
     const pa = a.payments?.total ?? 0;
     const pb = b.payments?.total ?? 0;

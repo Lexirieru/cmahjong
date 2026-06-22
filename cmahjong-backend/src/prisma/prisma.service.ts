@@ -2,9 +2,9 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from "@nestjs/commo
 import { PrismaClient } from "@prisma/client";
 
 /**
- * Wrapper PrismaClient untuk NestJS. Koneksi DB bersifat best-effort saat boot:
- * bila Postgres belum jalan, server tetap hidup (game state live tetap di memori),
- * dan operasi DB akan gagal eksplisit saat dipakai.
+ * PrismaClient wrapper for NestJS. The DB connection is best-effort at boot:
+ * if Postgres is not running yet, the server stays up (live game state remains in memory),
+ * and DB operations will fail explicitly when used.
  */
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
@@ -13,9 +13,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   async onModuleInit(): Promise<void> {
     try {
       await this.$connect();
-      this.logger.log("Terhubung ke Postgres");
+      this.logger.log("Connected to Postgres");
     } catch (err) {
-      this.logger.warn(`Postgres tidak tersedia saat boot: ${(err as Error).message}`);
+      this.logger.warn(`Postgres not available at boot: ${(err as Error).message}`);
     }
   }
 

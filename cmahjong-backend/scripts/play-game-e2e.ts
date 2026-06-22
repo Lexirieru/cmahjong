@@ -1,10 +1,10 @@
 /**
- * E2E: boot backend NestJS, sambungkan 4 klien socket, dan auto-main SATU GAME
- * penuh (hanchan East) sampai selesai, lalu cek ranking final + settle payload.
+ * E2E: boot the NestJS backend, connect 4 socket clients, and auto-play ONE FULL
+ * GAME (East hanchan) to completion, then check the final ranking + settle payload.
  *
- * Strategi auto-player: di giliran sendiri buang ubin yang baru ditarik; setiap
- * tawaran call dijawab pass. Ronde berakhir exhaustive draw, hanchan maju via
- * rotasi dealer hingga selesai.
+ * Auto-player strategy: on your own turn, discard the freshly drawn tile; every
+ * call offer is answered with a pass. The round ends in an exhaustive draw, and the
+ * hanchan advances via dealer rotation until it finishes.
  *
  *   npx ts-node scripts/play-game-e2e.ts
  */
@@ -76,7 +76,7 @@ async function main() {
       const hand = hands[seat];
       if (hand && hand.length >= 14) {
         const tileId = hand[hand.length - 1].id;
-        if (lastDiscardId[seat] === tileId) return; // sudah dibuang (hindari dobel)
+        if (lastDiscardId[seat] === tileId) return; // already discarded (avoid duplicates)
         lastDiscardId[seat] = tileId;
         moves++;
         void emit(c, "discard", { gameId: GID, address: PLAYERS[seat], tileId });
@@ -90,7 +90,7 @@ async function main() {
       handCount++;
       if (h.seat === seat) {
         hands[seat] = h.tiles;
-        if (lastState.st) autoPlay(seat, c, lastState.st); // re-evaluasi bila hand tiba setelah state
+        if (lastState.st) autoPlay(seat, c, lastState.st); // re-evaluate if the hand arrives after the state
       }
     });
     c.on("state", (st: State) => {
@@ -108,15 +108,15 @@ async function main() {
         passedWindow.fill(false);
       }
     });
-    // tangani error ack stale (mis. pass terlambat) tanpa crash
+    // handle stale ack errors (e.g. a late pass) without crashing
     c.on("exception", () => {});
   });
 
-  // semua join, lalu mulai game
+  // everyone joins, then start the game
   for (let i = 0; i < 4; i++) await emit(clients[i], "join", { gameId: GID, address: PLAYERS[i] });
   await emit(clients[0], "start", { gameId: GID, seed: SEED, players: PLAYERS, length: "east" });
 
-  // tunggu selesai (log progres tiap 3s)
+  // wait until finished (log progress every 3s)
   const start = Date.now();
   let tick = 0;
   while (!finished && Date.now() - start < 30000) {
@@ -129,26 +129,26 @@ async function main() {
     }
   }
 
-  console.log("\n──────── HASIL ────────");
-  console.log("diagnostik: state events:", stateCount, "| hand events:", handCount, "| first:", firstState);
+  console.log("\n──────── RESULT ────────");
+  console.log("diagnostics: state events:", stateCount, "| hand events:", handCount, "| first:", firstState);
   console.log("hand sizes:", [0, 1, 2, 3].map((s) => hands[s]?.length ?? 0));
-  console.log("selesai:", finished);
-  console.log("ronde dimainkan:", rounds + 1);
-  console.log("total discard:", moves);
-  console.log("poin akhir:", lastPoints);
-  console.log("ranking final (juara 1..4):", settle?.ranking);
+  console.log("finished:", finished);
+  console.log("rounds played:", rounds + 1);
+  console.log("total discards:", moves);
+  console.log("final points:", lastPoints);
+  console.log("final ranking (1st..4th):", settle?.ranking);
 
   clients.forEach((c) => c.disconnect());
   await app.close();
 
   if (!finished) {
-    console.error("❌ Game tidak selesai dalam waktu yang ditentukan");
+    console.error("❌ Game did not finish within the allotted time");
     process.exit(1);
   }
-  console.log("\n✅ SATU GAME PENUH SELESAI END-TO-END");
+  console.log("\n✅ ONE FULL GAME COMPLETED END-TO-END");
 }
 
 main().catch((e) => {
-  console.error("❌ GAGAL:", e);
+  console.error("❌ FAILED:", e);
   process.exit(1);
 });

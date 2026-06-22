@@ -1,11 +1,11 @@
 /**
- * Mekanik satu ronde Riichi (state machine giliran) di atas engine.
+ * Mechanics of a single Riichi round (turn state machine) on top of the engine.
  *
- * Mendukung: deal dari seed, draw/discard, fase CALL dengan PRIORITAS
- * (ron > pon/kan > chi) via pengumpulan respons pemain, ankan & shouminkan
- * (+ rinshan/kan-dora), riichi + double riichi, IPPATSU, FURITEN (permanen,
- * sementara, & riichi-furiten), tsumo, ron, exhaustive draw + noten payment.
- * TODO: chankan (rob kan), multi-ron, uradora.
+ * Supports: dealing from a seed, draw/discard, the CALL phase with PRIORITY
+ * (ron > pon/kan > chi) via collecting player responses, ankan & shouminkan
+ * (+ rinshan/kan-dora), riichi + double riichi, IPPATSU, FURITEN (permanent,
+ * temporary, & riichi-furiten), tsumo, ron, exhaustive draw + noten payment.
+ * TODO: chankan (rob the kan), multi-ron, uradora.
  */
 import { Tile, toCounts } from "../engine/tiles";
 import { shuffledWall } from "../engine/wall";
@@ -30,25 +30,25 @@ export interface Call {
 
 export interface CallClaim {
   type: ClaimType;
-  /** untuk chi: kind terendah dari urutan yang dipilih */
+  /** for chi: the lowest kind of the chosen sequence */
   low?: number;
 }
 
 export interface CallResolution {
   resolved: boolean;
-  /** aksi yang menang prioritas (saat resolved) */
+  /** the action that won priority (when resolved) */
   action?: ClaimType;
-  /** outcome ronde bila resolusi mengakhiri ronde (ron / draw) */
+  /** the round outcome if the resolution ends the round (ron / draw) */
   outcome?: RoundOutcome | null;
 }
 
 export interface RoundOutcome {
   type: "tsumo" | "ron" | "draw";
-  winner?: number; // pemenang utama (head-bump untuk ron ganda)
-  winners?: number[]; // semua pemenang (multi-ron)
+  winner?: number; // primary winner (head-bump for multiple ron)
+  winners?: number[]; // all winners (multi-ron)
   loser?: number;
-  score?: ScoreResult; // skor pemenang utama
-  scores?: ScoreResult[]; // skor tiap pemenang (multi-ron, selaras winners)
+  score?: ScoreResult; // score of the primary winner
+  scores?: ScoreResult[]; // score of each winner (multi-ron, aligned with winners)
   points: number[];
   tenpai?: boolean[];
 }
@@ -80,7 +80,7 @@ export class Round {
   melds: Meld[][] = [[], [], [], []];
   discards: number[][] = [[], [], [], []];
   doraIndicators: number[] = [];
-  private uraIndicators: number[] = []; // dibuka hanya saat menang riichi (tak di publicState)
+  private uraIndicators: number[] = []; // revealed only on a riichi win (not in publicState)
   private chankan: { seat: number; kind: number } | null = null;
   riichi: boolean[] = [false, false, false, false];
   private riichiDouble: boolean[] = [false, false, false, false];
@@ -137,7 +137,7 @@ export class Round {
     this.hands = dealt.hands;
     this.liveWall = dealt.liveWall;
     this.deadWall = dealt.deadWall;
-    // layout dead wall: dora indikator di indeks genap, ura di ganjil (interleaved)
+    // dead wall layout: dora indicator at even indices, ura at odd indices (interleaved)
     this.doraIndicators = [this.deadWall[0].kind];
     this.uraIndicators = [this.deadWall[1].kind];
 
@@ -157,7 +157,7 @@ export class Round {
     return this.melds[seat].every((m) => !m.open);
   }
 
-  /** Furiten: tak boleh ron. Permanen / sementara / tunggu ada di buangan sendiri. */
+  /** Furiten: ron is not allowed. Permanent / temporary / a wait sits in one's own discards. */
   isFuriten(seat: number): boolean {
     if (this.furitenPerm[seat] || this.furitenTemp[seat]) return true;
     const w = tenpaiWaits(toCounts(this.hands[seat]), this.melds[seat]);
@@ -167,7 +167,7 @@ export class Round {
   private drawForCurrent(rinshan = false): Tile | null {
     let tile: Tile | undefined;
     if (rinshan) {
-      // rinshan diambil dari belakang dead wall; indikator dora/ura baru dari depan
+      // rinshan is drawn from the back of the dead wall; new dora/ura indicators from the front
       tile = this.deadWall[this.deadWall.length - 1 - this.kansDone];
       this.kansDone++;
       const dIdx = 2 * this.kansDone;
@@ -182,7 +182,7 @@ export class Round {
     this.awaitingDiscard = true;
     this.drewFromWall = true;
     this.rinshanPending = rinshan;
-    this.furitenTemp[this.turn] = false; // giliran baru menghapus furiten sementara
+    this.furitenTemp[this.turn] = false; // a new turn clears temporary furiten
     return tile;
   }
 
@@ -213,7 +213,7 @@ export class Round {
       openMelds: this.melds[seat],
       ctx,
       doraIndicators: this.doraIndicators,
-      uraIndicators: this.uraIndicators, // hanya dihitung bila riichi (di score.ts)
+      uraIndicators: this.uraIndicators, // only counted if riichi (in score.ts)
       aka: 0,
       isDealer: seat === this.dealer,
     });
@@ -232,7 +232,7 @@ export class Round {
     const seat = this.turn;
     const winTile = this.hands[seat][this.hands[seat].length - 1].kind;
     const result = this.buildScore(seat, true, winTile);
-    if (!result.agari) throw new Error("bukan tangan menang (tsumo)");
+    if (!result.agari) throw new Error("not a winning hand (tsumo)");
 
     const p = result.payments!;
     if ("tsumo" in p && p.tsumo) {
@@ -249,31 +249,31 @@ export class Round {
   }
 
   declareRiichi(seat: number, tileId: number): void {
-    if (seat !== this.turn || !this.awaitingDiscard) throw new Error("bukan giliran seat ini");
-    if (!this.isMenzen(seat)) throw new Error("riichi hanya untuk tangan tertutup");
-    if (this.points[seat] < 1000) throw new Error("poin tak cukup untuk riichi");
+    if (seat !== this.turn || !this.awaitingDiscard) throw new Error("not this seat's turn");
+    if (!this.isMenzen(seat)) throw new Error("riichi is only for a closed hand");
+    if (this.points[seat] < 1000) throw new Error("not enough points for riichi");
     const hand = this.hands[seat];
     const idx = tileId >= 0 ? hand.findIndex((t) => t.id === tileId) : hand.length - 1;
-    if (idx === -1) throw new Error("ubin tidak ada di tangan");
+    if (idx === -1) throw new Error("tile is not in hand");
     const after = toCounts(hand.filter((_, i) => i !== idx));
-    if (tenpaiWaits(after, this.melds[seat]).length === 0) throw new Error("riichi harus tenpai");
+    if (tenpaiWaits(after, this.melds[seat]).length === 0) throw new Error("riichi must be tenpai");
 
-    // double riichi: deklarasi pada buangan pertama, tanpa call sebelumnya
+    // double riichi: declared on the first discard, with no prior call
     const isDouble = !this.anyCall && this.discards[seat].length === 0;
     this.riichi[seat] = true;
     this.riichiDouble[seat] = isDouble;
     this.points[seat] -= 1000;
     this.discard(seat, tileId);
-    this.ippatsu[seat] = true; // jendela ippatsu dibuka setelah buang
+    this.ippatsu[seat] = true; // the ippatsu window opens after discarding
   }
 
   discard(seat: number, tileId: number): RoundOutcome | null {
     this.ensure("playing");
-    if (seat !== this.turn || !this.awaitingDiscard) throw new Error("bukan giliran seat ini");
-    this.ippatsu[seat] = false; // buang berikutnya menutup jendela ippatsu
+    if (seat !== this.turn || !this.awaitingDiscard) throw new Error("not this seat's turn");
+    this.ippatsu[seat] = false; // the next discard closes the ippatsu window
     const hand = this.hands[seat];
     const idx = tileId >= 0 ? hand.findIndex((t) => t.id === tileId) : hand.length - 1;
-    if (idx === -1) throw new Error("ubin tidak ada di tangan");
+    if (idx === -1) throw new Error("tile is not in hand");
     const [tile] = hand.splice(idx, 1);
     this.discards[seat].push(tile.kind);
     this.lastDiscard = { seat, kind: tile.kind };
@@ -292,8 +292,8 @@ export class Round {
 
   ankan(seat: number, kind: number): RoundOutcome | null {
     this.ensure("playing");
-    if (seat !== this.turn || !this.awaitingDiscard) throw new Error("bukan giliran seat ini");
-    if (toCounts(this.hands[seat])[kind] < 4) throw new Error("tidak punya 4 ubin untuk ankan");
+    if (seat !== this.turn || !this.awaitingDiscard) throw new Error("not this seat's turn");
+    if (toCounts(this.hands[seat])[kind] < 4) throw new Error("do not have 4 tiles for ankan");
     this.clearIppatsu();
     this.removeFromHand(seat, kind, 4);
     this.melds[seat].push({ type: "kan", kind, open: false });
@@ -302,15 +302,15 @@ export class Round {
     return null;
   }
 
-  /** Shouminkan (tambah ke pon). Bisa dirampok (chankan) oleh penunggu ubin tsb. */
+  /** Shouminkan (add to a pon). Can be robbed (chankan) by anyone waiting on that tile. */
   addedKan(seat: number, kind: number): RoundOutcome | null {
     this.ensure("playing");
-    if (seat !== this.turn || !this.awaitingDiscard) throw new Error("bukan giliran seat ini");
+    if (seat !== this.turn || !this.awaitingDiscard) throw new Error("not this seat's turn");
     const meld = this.melds[seat].find((m) => m.type === "triplet" && m.kind === kind && m.open);
-    if (!meld) throw new Error("tidak ada pon untuk ditambah");
-    if (toCounts(this.hands[seat])[kind] < 1) throw new Error("tidak punya ubin ke-4");
+    if (!meld) throw new Error("no pon to add to");
+    if (toCounts(this.hands[seat])[kind] < 1) throw new Error("do not have the 4th tile");
 
-    // tawarkan chankan (rob the kan) sebelum kan selesai
+    // offer chankan (rob the kan) before the kan completes
     const robbers = this.computeChankanRobbers(seat, kind);
     if (robbers.length) {
       this.chankan = { seat, kind };
@@ -335,7 +335,7 @@ export class Round {
     return null;
   }
 
-  /** Penunggu yang bisa merampok shouminkan (tenpai, bukan furiten, ada yaku). */
+  /** Waiters who can rob a shouminkan (tenpai, not furiten, has a yaku). */
   private computeChankanRobbers(kanSeat: number, kind: number): number[] {
     const out: number[] = [];
     for (let seat = 0; seat < SEATS; seat++) {
@@ -387,7 +387,7 @@ export class Round {
       if (seat === from) continue;
       const counts = toCounts(this.hands[seat]);
 
-      // ron (kecuali furiten)
+      // ron (except furiten)
       if (!this.isFuriten(seat)) {
         const temp = counts.slice();
         temp[d]++;
@@ -415,7 +415,7 @@ export class Round {
         }
       }
 
-      if (this.riichi[seat]) continue; // setelah riichi hanya boleh ron
+      if (this.riichi[seat]) continue; // after riichi, only ron is allowed
 
       if (counts[d] >= 2) calls.push({ seat, type: "pon" });
       if (counts[d] >= 3) calls.push({ seat, type: "kan" });
@@ -445,18 +445,18 @@ export class Round {
   }
 
   /**
-   * Catat respons seorang pemain pada fase call. Begitu semua pemain yang berhak
-   * merespons, resolusi prioritas dijalankan otomatis.
+   * Record a player's response during the call phase. Once all eligible players
+   * have responded, priority resolution runs automatically.
    */
   respond(seat: number, claim: CallClaim): CallResolution {
     this.ensure("awaitingCalls");
     const eligible = this.eligibleSeats();
     if (!eligible.includes(seat)) {
       if (claim.type === "pass") return { resolved: false };
-      throw new Error("seat ini tak punya call tersedia");
+      throw new Error("this seat has no available call");
     }
     if (claim.type !== "pass" && !this.pendingCalls.some((c) => c.seat === seat && c.type === claim.type)) {
-      throw new Error(`call ${claim.type} tak tersedia untuk seat ini`);
+      throw new Error(`call ${claim.type} is not available for this seat`);
     }
     this.responses.set(seat, claim);
 
@@ -464,27 +464,27 @@ export class Round {
     return { resolved: false };
   }
 
-  /** Paksa resolusi (mis. timeout): seat tanpa respons dianggap pass. */
+  /** Force resolution (e.g. timeout): seats without a response are treated as pass. */
   resolveCalls(): CallResolution {
     this.ensure("awaitingCalls");
     const claimOf = (s: number): ClaimType =>
       (this.responses.get(s)?.type ?? "pass") as ClaimType;
 
-    // furiten sementara untuk yang bisa ron tapi tidak ron
+    // temporary furiten for those who could ron but did not
     for (const c of this.pendingCalls) {
       if (c.type === "ron" && claimOf(c.seat) !== "ron") {
         this.furitenTemp[c.seat] = true;
-        if (this.riichi[c.seat]) this.furitenPerm[c.seat] = true; // riichi-furiten permanen
+        if (this.riichi[c.seat]) this.furitenPerm[c.seat] = true; // riichi-furiten is permanent
       }
     }
 
-    // chankan (rob the kan): hanya ron yang mungkin
+    // chankan (rob the kan): only ron is possible
     if (this.chankan) return this.resolveChankan(claimOf);
 
     const from = this.lastDiscard!.seat;
-    const order = (s: number) => (s - from + SEATS) % SEATS; // kedekatan searah giliran
+    const order = (s: number) => (s - from + SEATS) % SEATS; // proximity in turn order
 
-    // prioritas: ron (boleh ganda) > pon/kan > chi
+    // priority: ron (can be multiple) > pon/kan > chi
     const rons = this.pendingCalls
       .filter((c) => c.type === "ron" && claimOf(c.seat) === "ron")
       .map((c) => c.seat)
@@ -511,7 +511,7 @@ export class Round {
       return { resolved: true, action: "chi", outcome: null };
     }
 
-    // semua pass
+    // all pass
     this.phase = "playing";
     this.pendingCalls = [];
     this.responses.clear();
@@ -529,7 +529,7 @@ export class Round {
       const outcome = this.applyRons(robbers, kind, kanSeat, { chankan: true });
       return { resolved: true, action: "ron", outcome };
     }
-    // tak ada yang merampok -> selesaikan kan
+    // nobody robs -> complete the kan
     this.chankan = null;
     this.responses.clear();
     const outcome = this.completeAddedKan(kanSeat, kind);
@@ -541,7 +541,7 @@ export class Round {
     this.anyCall = true;
   }
 
-  /** Terapkan satu atau lebih ron (multi-ron). Pemenang utama = terdekat dari pembuang. */
+  /** Apply one or more ron (multi-ron). Primary winner = closest to the discarder. */
   private applyRons(
     seats: number[],
     winTile: number,
@@ -554,7 +554,7 @@ export class Round {
       const result = this.buildScore(seat, false, winTile, opts);
       if (!result.agari) {
         this.hands[seat].pop();
-        throw new Error("bukan tangan menang (ron)");
+        throw new Error("not a winning hand (ron)");
       }
       const pay = result.payments!.ron!;
       this.points[loser] -= pay;
@@ -631,7 +631,7 @@ export class Round {
         removed++;
       }
     }
-    if (removed < n) throw new Error("ubin tak cukup di tangan");
+    if (removed < n) throw new Error("not enough tiles in hand");
   }
 
   private exhaustiveDraw(): RoundOutcome {
@@ -679,11 +679,11 @@ export class Round {
   }
 
   private ensure(phase: Phase) {
-    if (this.phase !== phase) throw new Error(`aksi tak valid pada fase ${this.phase}`);
+    if (this.phase !== phase) throw new Error(`invalid action in phase ${this.phase}`);
   }
 
   // ---------------------------------------------------------------- persist
-  /** Serialisasi seluruh state ronde (JSON-safe) untuk disimpan ke DB. */
+  /** Serialize the entire round state (JSON-safe) to be saved to the DB. */
   snapshot(): RoundSnapshot {
     return {
       dealer: this.dealer,
@@ -715,7 +715,7 @@ export class Round {
     };
   }
 
-  /** Rekonstruksi Round dari snapshot. */
+  /** Reconstruct a Round from a snapshot. */
   static restore(s: RoundSnapshot): Round {
     const r = new Round("0x" + "00".repeat(32), s.dealer, s.roundWind, s.points.slice(), {
       hands: s.hands,
