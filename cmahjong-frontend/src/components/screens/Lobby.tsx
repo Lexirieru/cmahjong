@@ -17,7 +17,8 @@ import { publicClient } from "@/lib/chain";
 import { erc20Abi } from "@/lib/erc20";
 import { tokenByAddress } from "@/lib/tokens";
 import { commitmentOf, loadSecret, randomSecret, saveSecret } from "@/lib/game";
-import { fmt, shortAddr } from "@/lib/format";
+import { fmt } from "@/lib/format";
+import { aliasOf } from "@/lib/identity";
 
 export function Lobby({
   gameId,
@@ -167,7 +168,7 @@ export function Lobby({
                 className="flex items-center justify-between rounded-xl surface px-4 py-3"
               >
                 <span className={filled ? "font-medium" : "text-ivory/35"}>
-                  {filled ? `${shortAddr(p)}${me ? " · you" : ""}` : "Waiting…"}
+                  {filled ? (me ? "You" : aliasOf(p)) : "Waiting…"}
                 </span>
                 {filled &&
                   (revealed ? (

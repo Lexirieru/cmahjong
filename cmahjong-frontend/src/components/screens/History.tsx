@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { BackTitle } from "./CreateTable";
 import { listGames, type GameSummary } from "@/lib/api";
-import { shortAddr } from "@/lib/format";
+import { aliasOf } from "@/lib/identity";
 
 export function History({
   onBack,
@@ -49,7 +49,7 @@ export function History({
               </div>
               <div className="mt-1 text-xs text-ivory/50">
                 {g.players.length} players
-                {winner && <> · winner {shortAddr(winner)}</>}
+                {winner && <> · winner {aliasOf(winner)}</>}
               </div>
             </button>
           );

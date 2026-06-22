@@ -1,7 +1,8 @@
 "use client";
 
 import type { Address } from "viem";
-import { shortAddr, fmt } from "@/lib/format";
+import { fmt } from "@/lib/format";
+import { aliasOf } from "@/lib/identity";
 import type { Balances } from "@/hooks/useBalances";
 
 export function Header({ address, balances }: { address: Address | null; balances: Balances }) {
@@ -16,9 +17,9 @@ export function Header({ address, balances }: { address: Address | null; balance
       </div>
       {address && (
         <div className="flex items-center gap-2 rounded-full surface px-3 py-1.5 text-xs">
-          <span className="text-ivory/60">{fmt(balances.cUSD ?? "0", 2)} cUSD</span>
+          <span className="text-ivory/60">{fmt(balances.USDm ?? "0", 2)} USDm</span>
           <span className="h-3 w-px bg-white/15" />
-          <span className="font-medium">{shortAddr(address)}</span>
+          <span className="font-medium">{aliasOf(address)}</span>
         </div>
       )}
     </header>
