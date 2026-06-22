@@ -44,6 +44,30 @@ body {
   overflow-x: clip;
 }
 
+/* On wider screens (web/desktop) present the app as a centered phone-style frame. */
+@media (min-width: 600px) {
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-block: 1.5rem;
+  }
+  .app-shell {
+    min-height: 0;
+    height: min(880px, calc(100dvh - 3rem));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.06) inset,
+      0 40px 90px -30px rgba(0, 0, 0, 0.75);
+    background:
+      radial-gradient(120% 60% at 50% -10%, rgba(21, 92, 72, 0.55) 0%, transparent 55%),
+      linear-gradient(180deg, #0d3b2e 0%, #0a3026 100%);
+  }
+}
+
 .surface {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
