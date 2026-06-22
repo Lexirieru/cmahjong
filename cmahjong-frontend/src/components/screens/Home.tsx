@@ -12,6 +12,7 @@ interface Props {
   onJoin: () => void;
   onHistory: () => void;
   onHowTo: () => void;
+  error?: string | null;
 }
 
 export function Home({
@@ -23,6 +24,7 @@ export function Home({
   onJoin,
   onHistory,
   onHowTo,
+  error,
 }: Props) {
   return (
     <div className="flex flex-1 flex-col px-5 lg:px-10">
@@ -62,6 +64,9 @@ export function Home({
                   Join a table
                 </Button>
               </>
+            )}
+            {error && (
+              <p className="text-center text-sm leading-snug text-red-300 lg:text-left">{error}</p>
             )}
             <div className="flex items-center justify-center gap-4 pt-1 text-xs text-ivory/45 lg:justify-start">
               <button onClick={onHowTo}>How to play</button>

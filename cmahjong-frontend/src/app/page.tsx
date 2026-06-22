@@ -29,7 +29,7 @@ type Screen =
 const PREVIEW_ADDR = "0x0000000000000000000000000000000000000000" as Address;
 
 export default function Page() {
-  const { address, inMiniPay, connecting, connect } = useWallet();
+  const { address, inMiniPay, connecting, error: walletError, connect } = useWallet();
   const { balances } = useBalances(address);
   const [screen, setScreen] = useState<Screen>("home");
   const [gameId, setGameId] = useState<bigint | null>(null);
@@ -118,6 +118,7 @@ export default function Page() {
           onJoin={() => setScreen("join")}
           onHistory={() => setScreen("history")}
           onHowTo={() => setScreen("howto")}
+          error={walletError}
         />
       )}
 
