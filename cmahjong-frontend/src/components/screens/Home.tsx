@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { Address } from "viem";
 import { Button } from "@/components/Button";
 
@@ -76,6 +77,13 @@ export function Home({
             <p className="pt-1 text-center text-xs text-ivory/40 lg:text-left">
               Provably fair shuffle · settled on Celo
             </p>
+            <div className="flex items-center justify-center gap-3 pt-2 text-[11px] text-ivory/35 lg:justify-start">
+              <a href="mailto:axelmatsama@gmail.com">Support</a>
+              <span className="text-ivory/15">·</span>
+              <Link href="/terms">Terms</Link>
+              <span className="text-ivory/15">·</span>
+              <Link href="/privacy">Privacy</Link>
+            </div>
           </div>
         </div>
       </div>
