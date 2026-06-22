@@ -39,3 +39,17 @@ export async function fetchReplayStates(gameId: string): Promise<ReplayStates> {
   if (!res.ok) throw new Error("Replay not available for this game");
   return res.json();
 }
+
+export interface Stats {
+  games: { total: number; settled: number; playing: number; last7d: number; last30d: number };
+  players: { total: number; activeLast7d: number };
+  moves: { total: number; avgPerGame: number };
+  onchainTxEstimate: number;
+  updatedAt: string;
+}
+
+export async function fetchStats(): Promise<Stats> {
+  const res = await fetch(`${BASE}/stats`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to load stats");
+  return res.json();
+}

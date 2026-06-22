@@ -25,3 +25,14 @@ export class HistoryController {
     return this.history.getReplayStates(gameId);
   }
 }
+
+/** Public stats endpoint: GET /stats (no wallet required). */
+@Controller()
+export class StatsController {
+  constructor(private readonly history: HistoryService) {}
+
+  @Get("stats")
+  stats() {
+    return this.history.getStats();
+  }
+}

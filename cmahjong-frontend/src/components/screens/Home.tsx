@@ -73,6 +73,8 @@ export function Home({
               <button onClick={onHowTo}>How to play</button>
               <span className="text-ivory/20">·</span>
               <button onClick={onHistory}>History &amp; replays</button>
+              <span className="text-ivory/20">·</span>
+              <Link href="/stats">Stats</Link>
             </div>
             <p className="pt-1 text-center text-xs text-ivory/40 lg:text-left">
               Provably fair shuffle · settled on Celo
