@@ -102,7 +102,11 @@ export default function Page() {
 
   return (
     <>
-      {!hideHeader && <Header address={address} balances={balances} />}
+      {!hideHeader && (
+        <div className={`mx-auto w-full ${screen === "home" ? "max-w-5xl px-5 lg:px-10" : "max-w-md"}`}>
+          <Header address={address} balances={balances} />
+        </div>
+      )}
 
       {screen === "home" && (
         <Home
@@ -117,6 +121,8 @@ export default function Page() {
         />
       )}
 
+      {screen !== "home" && (
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
       {screen === "howto" && <HowToPlay onBack={home} />}
 
       {screen === "history" && (
@@ -176,6 +182,8 @@ export default function Page() {
 
       {screen === "result" && gameId !== null && address && (
         <Result gameId={gameId} address={address} onHome={home} />
+      )}
+      </div>
       )}
     </>
   );
