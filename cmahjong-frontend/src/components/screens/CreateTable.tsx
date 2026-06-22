@@ -60,7 +60,7 @@ export function CreateTable({
       <BackTitle title="New table" onBack={onBack} />
 
       <div className="flex-1 space-y-6 pt-2">
-        <Field label="Buy-in currency">
+        <Field label="Prize currency">
           <div className="grid grid-cols-4 gap-2">
             {TOKENS.map((t, i) => (
               <button
@@ -76,7 +76,7 @@ export function CreateTable({
           </div>
         </Field>
 
-        <Field label="Buy-in per player">
+        <Field label="Entry per player">
           <div className="flex items-center rounded-2xl surface px-4">
             <input
               inputMode="decimal"
@@ -107,9 +107,9 @@ export function CreateTable({
 
         <div className="rounded-2xl surface p-4 text-sm">
           <Row label="Players" value="4" />
-          <Row label="Total pot" value={`${fmt(Number(amount || 0) * 4)} ${token.symbol}`} />
-          <Row label="Payout (1st–4th)" value="50 · 30 · 15 · 5%" />
-          <Row label="House rake" value="3%" last />
+          <Row label="Prize pool" value={`${fmt(Number(amount || 0) * 4)} ${token.symbol}`} />
+          <Row label="Prize split (1st–4th)" value="50 · 30 · 15 · 5%" />
+          <Row label="House cut" value="None" last />
         </div>
 
         {error && <p className="text-sm text-red-300">{error}</p>}

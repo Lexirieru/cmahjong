@@ -6,7 +6,8 @@ const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "cMahjong",
-  description: "Play 4-player mahjong. Stake stablecoins. Winner takes the pot.",
+  description:
+    "Skill-based riichi mahjong. Four players compete for a stablecoin prize pool on Celo — no house cut.",
   icons: { icon: "/logos/cmahjong.png", apple: "/logos/cmahjong.png" },
   other: {
     // Talent App domain ownership verification

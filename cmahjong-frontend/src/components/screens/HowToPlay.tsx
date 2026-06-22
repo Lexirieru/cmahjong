@@ -28,8 +28,8 @@ const STEPS: { title: string; body: string; tiles?: number[] }[] = [
     body: "One tile away? Declare riichi. Win by self-draw (tsumo) or off someone's discard (ron). More valuable hands (yaku) score more.",
   },
   {
-    title: "The stakes",
-    body: "Each of the four players puts in a buy-in. Play a full game; the pot is paid out by final standing — 50 / 30 / 15 / 5%. The shuffle is provably fair and everything settles on Celo.",
+    title: "The prize",
+    body: "Each of the four players enters with a stablecoin buy-in that forms the prize pool. Play a full game of skill; the prize is shared by final standing — 50 / 30 / 15 / 5%, no house cut. Provably fair, settled on Celo.",
   },
 ];
 

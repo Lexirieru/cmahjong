@@ -10,7 +10,7 @@
 | Implementation (v1) | [`0xb0b902ba7Fa60bc057684E56fAA32D3516ddaE53`](https://celoscan.io/address/0xb0b902ba7Fa60bc057684E56fAA32D3516ddaE53) |
 | Pattern | UUPS (ERC1967Proxy) |
 | Owner / house / upgrader | `0x56A2950ddE6B1040d1DCC4b4C4Fc314Bd56eFB0E` |
-| Rake | 300 bps (3%) |
+| Rake | 0 bps (no house cut — skill-prize model) |
 | Verified | ✅ proxy & implementation on Celoscan |
 | Compiler | solc 0.8.30, optimizer 200, evm cancun |
 

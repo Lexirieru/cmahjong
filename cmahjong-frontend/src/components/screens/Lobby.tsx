@@ -145,9 +145,9 @@ export function Lobby({
       <div className="flex-1 space-y-4 pt-2">
         {token && game && (
           <div className="rounded-2xl surface p-4 text-sm">
-            <Row label="Buy-in" value={`${fmt(formatUnits(game.buyIn, token.decimals))} ${token.symbol}`} />
+            <Row label="Entry" value={`${fmt(formatUnits(game.buyIn, token.decimals))} ${token.symbol}`} />
             <Row
-              label="Pot"
+              label="Prize pool"
               value={`${fmt(Number(formatUnits(game.buyIn, token.decimals)) * 4)} ${token.symbol}`}
             />
             <Row label="Status" value={game.status} last />
@@ -194,7 +194,7 @@ export function Lobby({
           </Button>
         ) : game?.status === "Open" && !iAmIn && token ? (
           <Button onClick={join} loading={busy}>
-            Join · stake {fmt(formatUnits(game.buyIn, token.decimals))} {token.symbol}
+            Join · {fmt(formatUnits(game.buyIn, token.decimals))} {token.symbol} entry
           </Button>
         ) : (
           <Button variant="subtle" disabled>

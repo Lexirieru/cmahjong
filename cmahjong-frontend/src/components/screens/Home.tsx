@@ -45,11 +45,11 @@ export function Home({
         {/* copy + actions — center on mobile, left on desktop */}
         <div className="flex w-full flex-col text-center lg:order-1 lg:flex-1 lg:text-left">
           <h1 className="mx-auto max-w-[16rem] text-[28px] font-bold leading-[1.1] tracking-tight lg:mx-0 lg:max-w-none lg:text-5xl">
-            Real mahjong, real stakes
+            Real mahjong, real prizes
           </h1>
           <p className="mx-auto mt-3 max-w-[17rem] text-[15px] leading-relaxed text-ivory/65 lg:mx-0 lg:max-w-md lg:text-lg">
-            Four players each put in a buy-in. Play a full hand of riichi mahjong, and the pot is
-            paid out by final standing.
+            Four players, one prize pool. Outplay the table in a full hand of riichi mahjong — winners
+            share the prize by final standing. Skill-based, no house cut.
           </p>
 
           <div className="mt-8 w-full space-y-3 lg:max-w-xs">
