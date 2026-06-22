@@ -5,7 +5,7 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from "@nestjs/common";
-import { ChainService } from "../chain/chain.service";
+import { ChainService, ChainStatus } from "../chain/chain.service";
 import { SettlementService } from "../settlement/settlement.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CallClaim, CallResolution, Round, RoundOutcome } from "./round";
@@ -228,6 +228,44 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Schedule an on-chain settleByServer once the settle deadline passes. This is how
+   * MiniPay games settle: no player ever signs — the server attests the final ranking.
+   */
+  private async scheduleServerSettle(
+    chainGameId: string,
+    ranking: [string, string, string, string],
+    serverSig?: string,
+  ): Promise<void> {
+    if (!serverSig || !this.chain.configured) return;
+    try {
+      const g = await this.chain.readGame(BigInt(chainGameId));
+      if (g.status !== ChainStatus.Playing) return; // not on-chain, or already settled
+      const nowSec = Math.floor(Date.now() / 1000);
+      const waitMs = Math.max(0, (g.settleDeadline - nowSec) * 1000) + 5000; // small buffer past deadline
+      const t = setTimeout(() => void this.submitServerSettle(chainGameId, ranking, serverSig), waitMs);
+      if (typeof t.unref === "function") t.unref();
+      this.logger.log(`Auto settleByServer for game ${chainGameId} scheduled in ~${Math.round(waitMs / 1000)}s`);
+    } catch (e) {
+      this.logger.warn(`scheduleServerSettle failed: ${(e as Error).message}`);
+    }
+  }
+
+  private async submitServerSettle(
+    chainGameId: string,
+    ranking: [string, string, string, string],
+    serverSig: string,
+  ): Promise<void> {
+    try {
+      const g = await this.chain.readGame(BigInt(chainGameId));
+      if (g.status !== ChainStatus.Playing) return; // someone already settled in the meantime
+      const hash = await this.chain.submitSettleByServer(BigInt(chainGameId), ranking, serverSig);
+      this.logger.log(`Auto-settled game ${chainGameId} via server -> ${hash}`);
+    } catch (e) {
+      this.logger.warn(`auto settleByServer failed for ${chainGameId}: ${(e as Error).message}`);
+    }
+  }
+
+  /**
    * Start a round for a game. The seed is read from on-chain when available,
    * or provided directly (dev/test mode).
    */
@@ -283,6 +321,9 @@ export class GameService implements OnModuleInit, OnModuleDestroy {
       // open the settle session: players can submit signatures for a cooperative `settle`
       this.settlement.open(chainGameId, room.players, end.settle.ranking);
       void this.persistSettled(chainGameId, end.settle.ranking, room.hanchan.points);
+      // MiniPay players can't sign EIP-712, so finalize on-chain via settleByServer once the
+      // settle deadline passes — no player signature required.
+      void this.scheduleServerSettle(chainGameId, end.settle.ranking, end.settle.serverSig);
       void this.flushMoves(chainGameId); // write the remaining actions before the game is closed
     } else {
       this.queueSnapshot(chainGameId); // new round — save so resume is accurate
