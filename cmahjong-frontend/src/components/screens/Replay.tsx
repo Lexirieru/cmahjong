@@ -86,9 +86,11 @@ export function Replay({ gameId, onBack }: { gameId: string; onBack: () => void 
         </span>
       </div>
 
-      <Board state={frame.state} hand={frame.hands[0]} mySeat={0} />
+      <div className="flex-1 overflow-y-auto">
+        <Board state={frame.state} hand={frame.hands[0]} mySeat={0} allHands={frame.hands} />
+      </div>
 
-      <div className="pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="pt-1 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <p className="mb-2 text-center text-sm text-ivory/70">{caption}</p>
 
         <input
