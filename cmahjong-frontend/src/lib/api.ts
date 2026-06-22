@@ -14,7 +14,7 @@ export interface GameSummary {
 
 export interface ReplayFrame {
   seq: number;
-  seat: number; // -1 untuk frame "deal"
+  seat: number; // -1 for the "deal" frame
   kind: string;
   state: PublicState;
   hands: Tile[][];

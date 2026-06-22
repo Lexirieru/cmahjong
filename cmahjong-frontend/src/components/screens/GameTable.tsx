@@ -7,7 +7,7 @@ import { Button } from "@/components/Button";
 import { useGameSocket } from "@/hooks/useGameSocket";
 import type { PublicState, Tile as TileT } from "@/lib/socket";
 
-// State contoh agar meja tetap tampil utuh sebelum backend live.
+// Sample state so the table still renders fully before the backend is live.
 const DEMO_STATE: PublicState = {
   phase: "playing",
   dealer: 0,

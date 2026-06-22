@@ -8,7 +8,7 @@ import { TOKENS } from "@/lib/tokens";
 
 export type Balances = Record<string, string>; // symbol -> formatted
 
-/** Saldo semua token allowlist untuk satu alamat. */
+/** Balances of all allowlisted tokens for a single address. */
 export function useBalances(address: Address | null) {
   const [balances, setBalances] = useState<Balances>({});
   const [loading, setLoading] = useState(false);

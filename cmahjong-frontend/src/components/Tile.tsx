@@ -3,7 +3,7 @@
 import { TILE_BACK, tileLabel, tileSrc } from "@/lib/tiles";
 
 interface TileProps {
-  kind?: number; // undefined + faceDown -> tile belakang
+  kind?: number; // undefined + faceDown -> tile back
   width?: number; // px
   faceDown?: boolean;
   selected?: boolean;
@@ -11,7 +11,7 @@ interface TileProps {
   onClick?: () => void;
 }
 
-/** Satu ubin mahjong (SVG) dengan kedalaman tile yang taktil. */
+/** A single mahjong tile (SVG) with tactile tile depth. */
 export function Tile({ kind, width = 38, faceDown, selected, dim, onClick }: TileProps) {
   const height = Math.round(width * 1.34);
   const src = faceDown || kind === undefined ? TILE_BACK : tileSrc(kind);

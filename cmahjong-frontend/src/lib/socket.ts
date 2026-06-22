@@ -4,7 +4,7 @@ import { io, type Socket } from "socket.io-client";
 
 let socket: Socket | null = null;
 
-/** Koneksi tunggal ke backend game engine (Socket.IO). */
+/** Single connection to the game engine backend (Socket.IO). */
 export function getSocket(): Socket {
   if (!socket) {
     const url = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:3001";

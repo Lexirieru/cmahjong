@@ -63,7 +63,7 @@ export async function readGameCount(): Promise<bigint> {
   });
 }
 
-/** Wrapper kirim transaksi (legacy gas untuk MiniPay) + tunggu konfirmasi. */
+/** Transaction-send wrapper (legacy gas for MiniPay) + wait for confirmation. */
 export async function sendLegacy(
   hashPromise: Promise<`0x${string}`>,
 ): Promise<`0x${string}`> {

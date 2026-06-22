@@ -1,11 +1,11 @@
 "use client";
 
-/** Apakah dApp berjalan di dalam dompet MiniPay? */
+/** Is the dApp running inside the MiniPay wallet? */
 export function isMiniPay(): boolean {
   return typeof window !== "undefined" && window.ethereum?.isMiniPay === true;
 }
 
-/** Minta akses akun (memunculkan prompt bila perlu). */
+/** Request account access (shows a prompt if needed). */
 export async function requestAccounts(): Promise<string | null> {
   if (typeof window === "undefined" || !window.ethereum) return null;
   const accounts = (await window.ethereum.request({
@@ -14,7 +14,7 @@ export async function requestAccounts(): Promise<string | null> {
   return accounts?.[0] ?? null;
 }
 
-/** Ambil akun yang SUDAH diizinkan tanpa prompt — untuk reconnect saat refresh. */
+/** Get already-authorized accounts without a prompt — for reconnecting on refresh. */
 export async function silentAccounts(): Promise<string | null> {
   if (typeof window === "undefined" || !window.ethereum) return null;
   try {

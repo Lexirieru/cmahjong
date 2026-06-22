@@ -6,8 +6,8 @@ import { isMiniPay, requestAccounts, silentAccounts } from "@/lib/minipay";
 import { ensureCeloChain } from "@/lib/chain";
 
 /**
- * Koneksi dompet. Di MiniPay koneksi otomatis (tombol connect disembunyikan);
- * di luar MiniPay, pengguna menekan connect.
+ * Wallet connection. In MiniPay the connection is automatic (the connect button is hidden);
+ * outside MiniPay, the user presses connect.
  */
 export function useWallet() {
   const [address, setAddress] = useState<Address | null>(null);
@@ -19,7 +19,7 @@ export function useWallet() {
     try {
       const acc = await requestAccounts();
       setAddress((acc as Address) ?? null);
-      // langsung arahkan wallet ke Celo begitu terhubung (no-op di MiniPay)
+      // immediately point the wallet to Celo once connected (no-op in MiniPay)
       if (acc) await ensureCeloChain().catch(() => {});
     } finally {
       setConnecting(false);
@@ -30,7 +30,7 @@ export function useWallet() {
     const mp = isMiniPay();
     setInMiniPay(mp);
     if (mp) void connect();
-    // di luar MiniPay: pulihkan koneksi tanpa prompt saat refresh
+    // outside MiniPay: restore the connection without a prompt on refresh
     else void silentAccounts().then((a) => a && setAddress(a as Address));
 
     const eth = window.ethereum;

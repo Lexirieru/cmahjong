@@ -25,7 +25,7 @@ declare global {
   }
 }
 
-/** Wallet client memakai provider yang di-inject (MiniPay / wallet apa pun). */
+/** Wallet client using the injected provider (MiniPay / any wallet). */
 export function getWalletClient() {
   if (typeof window === "undefined" || !window.ethereum) return null;
   return createWalletClient({
@@ -35,8 +35,8 @@ export function getWalletClient() {
 }
 
 /**
- * MiniPay hanya mendukung transaksi LEGACY (tanpa EIP-1559). Helper ini memaksa
- * tipe legacy + gas price dari jaringan agar transaksi diterima MiniPay.
+ * MiniPay only supports LEGACY transactions (no EIP-1559). This helper forces
+ * the legacy type + gas price from the network so the transaction is accepted by MiniPay.
  */
 export async function legacyGas() {
   const gasPrice = await publicClient.getGasPrice();
@@ -44,8 +44,8 @@ export async function legacyGas() {
 }
 
 /**
- * Pastikan wallet berada di Celo sebelum mengirim transaksi. Bila berbeda jaringan,
- * minta wallet pindah (tambahkan jaringan dulu bila belum ada). Di MiniPay ini no-op.
+ * Ensure the wallet is on Celo before sending a transaction. If on a different network,
+ * ask the wallet to switch (adding the network first if it isn't present). In MiniPay this is a no-op.
  */
 export async function ensureCeloChain() {
   const wallet = getWalletClient();

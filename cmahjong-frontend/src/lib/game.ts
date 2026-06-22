@@ -1,13 +1,13 @@
 import { encodePacked, keccak256, toHex, type Address } from "viem";
 
-/** Secret acak 32-byte untuk commit–reveal. */
+/** Random 32-byte secret for commit–reveal. */
 export function randomSecret(): `0x${string}` {
   const b = new Uint8Array(32);
   crypto.getRandomValues(b);
   return toHex(b);
 }
 
-/** commitment = keccak256(abi.encodePacked(gameId, player, secret)) — mirror kontrak. */
+/** commitment = keccak256(abi.encodePacked(gameId, player, secret)) — mirrors the contract. */
 export function commitmentOf(gameId: bigint, player: Address, secret: `0x${string}`) {
   return keccak256(encodePacked(["uint256", "address", "bytes32"], [gameId, player, secret]));
 }

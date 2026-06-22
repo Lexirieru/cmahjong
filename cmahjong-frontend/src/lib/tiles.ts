@@ -1,7 +1,7 @@
 /**
- * Pemetaan jenis ubin (kind 0..33) ke berkas SVG di /public/tiles.
- * Encoding selaras dengan backend engine:
- *   0..8 man · 9..17 pin · 18..26 sou · 27..30 angin E,S,W,N · 31..33 naga putih,hijau,merah
+ * Mapping of tile kind (0..33) to SVG files in /public/tiles.
+ * Encoding matches the backend engine:
+ *   0..8 man · 9..17 pin · 18..26 sou · 27..30 winds E,S,W,N · 31..33 dragons white,green,red
  */
 const MAN = ["Man1", "Man2", "Man3", "Man4", "Man5", "Man6", "Man7", "Man8", "Man9"];
 const PIN = ["Pin1", "Pin2", "Pin3", "Pin4", "Pin5", "Pin6", "Pin7", "Pin8", "Pin9"];
@@ -23,7 +23,7 @@ export const TILE_BACK = "/tiles/Back.svg";
 
 const HONOR_LABEL = ["East", "South", "West", "North", "White", "Green", "Red"];
 
-/** Label ringkas untuk aksesibilitas / tooltip. */
+/** Concise label for accessibility / tooltip. */
 export function tileLabel(kind: number): string {
   if (kind < 27) {
     const suit = kind < 9 ? "man" : kind < 18 ? "pin" : "sou";

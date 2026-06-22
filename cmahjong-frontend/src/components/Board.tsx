@@ -5,8 +5,8 @@ import type { PublicState, Tile as TileT } from "@/lib/socket";
 
 const WIND = ["E", "S", "W", "N"];
 
-/** Papan mahjong presentational: lawan, dora/wall, river buangan, dan tangan bawah.
- *  Dipakai baik untuk permainan live maupun replay (read-only). */
+/** Presentational mahjong board: opponents, dora/wall, discard river, and the bottom hand.
+ *  Used both for live games and replay (read-only). */
 export function Board({
   state,
   hand,

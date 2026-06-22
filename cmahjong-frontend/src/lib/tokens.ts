@@ -8,7 +8,7 @@ export interface TokenInfo {
   native?: boolean;
 }
 
-/** Token buy-in yang di-allowlist kontrak (Celo mainnet). */
+/** Buy-in tokens allowlisted by the contract (Celo mainnet). */
 export const TOKENS: TokenInfo[] = [
   { symbol: "cUSD", address: "0x765DE816845861e75A25fCA122bb6898B8B1282a", decimals: 18 },
   { symbol: "USDC", address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C", decimals: 6 },

@@ -10,8 +10,8 @@ export interface RoundEnd {
   settle?: { ranking: string[] };
 }
 
-/** Berlangganan state game realtime + tangan privat, dan expose aksi.
- *  `autoStart`: kirim "start" agar backend memulai ronde (membaca seed/pemain on-chain). */
+/** Subscribe to realtime game state + the private hand, and expose actions.
+ *  `autoStart`: send "start" so the backend begins the round (reading seed/players on-chain). */
 export function useGameSocket(gameId: string, address: Address, seat: number, autoStart = false) {
   const [state, setState] = useState<PublicState | null>(null);
   const [hand, setHand] = useState<Tile[]>([]);
