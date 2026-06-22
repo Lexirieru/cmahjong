@@ -82,7 +82,13 @@ export function CreateTable({
             <input
               inputMode="decimal"
               value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+              onChange={(e) => {
+                // accept comma as the decimal separator (id-ID) -> normalize to a dot
+                let v = e.target.value.replace(/,/g, ".").replace(/[^0-9.]/g, "");
+                const i = v.indexOf(".");
+                if (i !== -1) v = v.slice(0, i + 1) + v.slice(i + 1).replace(/\./g, ""); // single dot only
+                setAmount(v);
+              }}
               className="h-14 flex-1 bg-transparent text-2xl font-semibold outline-none"
             />
             <span className="text-ivory/50">{token.symbol}</span>
