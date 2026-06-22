@@ -8,6 +8,11 @@ export const metadata: Metadata = {
   title: "cMahjong",
   description: "Play 4-player mahjong. Stake stablecoins. Winner takes the pot.",
   icons: { icon: "/logos/cmahjong.png", apple: "/logos/cmahjong.png" },
+  other: {
+    // Talent App domain ownership verification
+    "talentapp:project_verification":
+      "54cabf52d6700880c398d47eb17f5bd782e57bb76ab6aab7de35f03d273649dc59f4be263b6535b14846f9de017fb2c8d2bbf757d9e34825ab0c172a4c6b6c22",
+  },
 };
 
 export const viewport: Viewport = {
