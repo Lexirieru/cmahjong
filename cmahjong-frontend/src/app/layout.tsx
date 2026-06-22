@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: "cMahjong",
   description:
     "Skill-based riichi mahjong. Four players compete for a stablecoin prize pool on Celo — no house cut.",
-  icons: { icon: "/logos/cmahjong.png", apple: "/logos/cmahjong.png" },
+  icons: { icon: "/logos/cmahjong.webp", apple: "/logos/cmahjong-180.png" },
   other: {
     // Talent App domain ownership verification
     "talentapp:project_verification":

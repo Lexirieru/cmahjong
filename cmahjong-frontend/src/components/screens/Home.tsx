@@ -34,7 +34,7 @@ export function Home({
           <div className="absolute inset-0 -z-10 rounded-full bg-gold-400/25 blur-3xl" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logos/cmahjong.png"
+            src="/logos/cmahjong.webp"
             alt="cMahjong"
             width={288}
             height={288}
