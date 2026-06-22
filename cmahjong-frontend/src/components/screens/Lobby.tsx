@@ -19,6 +19,7 @@ import { tokenByAddress } from "@/lib/tokens";
 import { commitmentOf, loadSecret, randomSecret, saveSecret } from "@/lib/game";
 import { fmt } from "@/lib/format";
 import { aliasOf } from "@/lib/identity";
+import { openAddCash } from "@/lib/minipay";
 
 export function Lobby({
   gameId,
@@ -63,6 +64,19 @@ export function Lobby({
     setError(null);
     try {
       await ensureCeloChain();
+
+      // Not enough stablecoin for the entry → send the user to MiniPay's deposit screen
+      const balance = (await publicClient.readContract({
+        address: token.address,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [address],
+      })) as bigint;
+      if (balance < game.buyIn) {
+        openAddCash(token.symbol);
+        return;
+      }
+
       const secret = randomSecret();
       saveSecret(gameId, address, secret);
       const commitment = commitmentOf(gameId, address, secret);

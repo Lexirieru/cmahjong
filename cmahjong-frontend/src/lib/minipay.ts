@@ -14,6 +14,12 @@ export async function requestAccounts(): Promise<string | null> {
   return accounts?.[0] ?? null;
 }
 
+/** Open MiniPay's Add Cash (deposit) screen — used when the user's balance is too low. */
+export function openAddCash(tokens = "USDm,USDC,USDT"): void {
+  if (typeof window === "undefined") return;
+  window.location.href = `https://link.minipay.xyz/add_cash?tokens=${encodeURIComponent(tokens)}`;
+}
+
 /** Get already-authorized accounts without a prompt — for reconnecting on refresh. */
 export async function silentAccounts(): Promise<string | null> {
   if (typeof window === "undefined" || !window.ethereum) return null;
