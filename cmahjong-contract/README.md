@@ -1,9 +1,10 @@
 # cMahjong — Contracts
 
-Smart contract escrow & settlement for **cMahjong**, a 4-player mahjong on **Celo**
-(stablecoin buy-in via MiniPay). The blockchain here acts purely as a
-**cashier + notary**: it holds the buy-in, anchors fairness, and pays out prizes.
-The game logic (tiles, turns, move validation) runs **offchain**.
+Smart contract escrow & settlement for **cMahjong**, a 4-player skill-based mahjong on
+**Celo**. Four players each deposit a stablecoin entry (USDm / USDC / USDT) that forms the
+prize pool; the blockchain acts purely as a **cashier + notary** — it holds the entries,
+anchors fairness, and pays out the prize by rank with **no house cut**. The game logic
+(tiles, turns, move validation) runs **offchain**.
 
 ## `MahjongTable.sol`
 
